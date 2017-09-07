@@ -87,6 +87,39 @@ def copy_to_buildpath(args, package, suffix="native"):
                            "/home/user/build"], suffix=suffix)
 
 
+def find_out_of_sync_files_tracked(args, git_root):
+    """
+    Find all files tracked by git, that are are out of sync with origin/HEAD.
+
+    In some cases (when you rename a remote or add it manually), origin/HEAD
+    does not exist. We check for that to provide a meaningful error mesasge
+    instead of a confusing crash (see #151).
+    See also: <https://stackoverflow.com/a/17639471>
+    """
+    # Return changed files compared to origin/HEAD when it exists
+    ret = pmb.helpers.run.user(args, ["git", "show-ref",
+                                      "refs/remotes/origin/HEAD"],
+                               working_dir=git_root, return_stdout=True,
+                               check=False)
+    if ret and "refs/remotes/origin/HEAD" in ret:
+        return pmb.helpers.run.user(args, ["git", "diff", "--name-only",
+                                           "origin"], working_dir=git_root,
+                                    return_stdout=True)
+
+    # Meaningful error
+    logging.debug("Output of 'git diff --name-only origin': " + str(ret))
+    logging.info("NOTE: As a workaround, you could disable the timestamp-based"
+                 " rebuilds feature in 'pmbootstrap init'.")
+    logging.info("See also: <https://github.com/postmarketOS/pmbootstrap/"
+                 "issues/151>")
+    fix_cmd = ("git symbolic-ref refs/remotes/origin/HEAD refs/remotes/"
+               "origin/master")
+    raise RuntimeError("Your aports repository does not have the"
+                       " 'origin/HEAD' reference. Please add it by"
+                       " running the following command inside " +
+                       git_root + ": " + fix_cmd)
+
+
 def aports_files_out_of_sync_with_git(args, package=None):
     """
     Get a list of files, about which git says, that they have changed in
@@ -127,11 +160,8 @@ def aports_files_out_of_sync_with_git(args, package=None):
             git_root = git_root.rstrip()
     ret = []
     if git_root and os.path.exists(git_root):
-        # Find tracked files out of sync with upstream
-        tracked = pmb.helpers.run.user(args, ["git", "diff", "--name-only", "origin"],
-                                       working_dir=git_root, return_stdout=True)
-
-        # Find all untracked files
+        # Find all out of sync files
+        tracked = find_out_of_sync_files_tracked(args, git_root)
         untracked = pmb.helpers.run.user(
             args, ["git", "ls-files", "--others", "--exclude-standard"],
             working_dir=git_root, return_stdout=True)
