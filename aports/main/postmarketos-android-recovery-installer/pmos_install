@@ -96,10 +96,19 @@ mount -t ext2 -rw "$PMOS_BOOT" /"$INSTALL_PARTITION"/boot || {
 }
 ui_print "Installing rootfs..."
 tar -xf rootfs.tar.gz -C /"$INSTALL_PARTITION"
-if [ "$FLASH_BOOTIMG" = "true" ]
+if [ "$FLASH_KERNEL" = "true" ]
 then
-	ui_print "Flashing boot.img..."
-	dd if=boot.img of="$BOOT"
+	if [ "$ISOREC" = "true" ]
+	then
+		ui_print "Flashing kernel..."
+		dd if=/"$INSTALL_PARTITION"/boot/vmlinuz-"$FLAVOR" of="$KERNEL_PARTITION"
+		ui_print "Flashing initfs..."
+		gunzip -c /"$INSTALL_PARTITION"/boot/initramfs-"$FLAVOR" | lzop \
+			> "$INITFS_PARTITION"
+	else
+		ui_print "Flashing boot.img..."
+		dd if=/"$INSTALL_PARTITION"/boot/boot.img-"$FLAVOR" of="$BOOT_PARTITION"
+	fi
 fi
 if [ "$FDE" = "true" ]
 then

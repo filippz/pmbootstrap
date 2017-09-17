@@ -55,14 +55,22 @@ extract_partition_table() {
 		echo "Couldn't find /$INSTALL_PARTITION/ in fstab."
 		return 1
 	fi
-	_BOOT=$(awk '/^\/boot/ {print $3}' /etc/recovery.fstab)
-	if [ ! -z "$_BOOT" ]
+	if [ "$ISOREC" = "true" ]
 	then
-		echo "boot partition found at $_BOOT"
-		export BOOT=$_BOOT
+		export KERNEL_PARTITION
+		KERNEL_PARTITION=$(findfs PARTLABEL="$KERNEL_PARTLABEL")
+		export INITFS_PARTITION
+		INITFS_PARTITION=$(findfs PARTLABEL="$INITFS_PARTLABEL")
 	else
-		echo "Couldn't find /boot/ in fstab."
-		return 1
+		_BOOT_PARTITION=$(awk '/^\/boot/ {print $3}' /etc/recovery.fstab)
+		if [ ! -z "$_BOOT_PARTITION" ]
+		then
+			echo "boot partition found at $_BOOT_PARTITION"
+			export BOOT_PARTITION=$_BOOT_PARTITION
+		else
+			echo "Couldn't find /boot/ in fstab."
+			return 1
+		fi
 	fi
 }
 
