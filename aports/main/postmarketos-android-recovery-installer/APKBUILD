@@ -1,10 +1,10 @@
 pkgname=postmarketos-android-recovery-installer
-pkgver=0.0.2
+pkgver=0.0.3
 pkgrel=1
 pkgdesc="TWRP compatible postmarketOS installer script"
 url="https://github.com/postmarketOS"
 # multipath-tools: kpartx
-depends="busybox-extras lddtree cryptsetup multipath-tools device-mapper parted zip"
+depends="busybox-extras lddtree cryptsetup multipath-tools device-mapper parted util-linux zip"
 source="build_zip.sh
 	update-binary
 	pmos_install
@@ -26,7 +26,7 @@ package() {
 	done
 	mkdir "$pkgdir/var/lib/postmarketos-android-recovery-installer/lib/"
 }
-sha512sums="4e4f56c84b404c53c3835304e8f7b651d6dbf19a653358daa6be1cc47e23360cb1dabb1331c13dd288fabb8eabaf8a01d094f054c334a156ca79f03948c9a17f  build_zip.sh
+sha512sums="d065577f587ee604cfa635c3eaba5c856800e9dafbbab65d4311dc89b72feab131fc23605bc0a344979f0760162bc509ac2056ee3c4d3e78e56be15032e314c1  build_zip.sh
 22083b3c776ae2e3e098dc8d9c4e085e7aae543aef20b42732c6750608e22c69211e199b946d55581403b71eb78e6508f618128122058a59466ad8a632e46ed8  update-binary
 c783e425f9d9c041d4023cb6770b3f83e03af04adcb27b582d7f68ee65b34dca10c403c742f69b709c3eed9cd4b9dffb544fa230c206f73720e2282ee2d2290b  pmos_install
 07de59a07c8fc81c240cc9065aae5a63a1979e9f4e53aa1035d6083055924181d99c28b7ac6cecd7933612519fa41b2604acc8ced80c66d7690246d300f555f8  pmos_install_functions
