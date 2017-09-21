@@ -52,8 +52,6 @@ ui_print "                                         "
 ui_print "postmarketOS recovery installer          "
 ui_print "                                         "
 
-ui_print "Extracting partition info from fstab..."
-extract_partition_table
 ui_print "Entering working directory..."
 cd "$WORKING_DIR"
 ui_print "Extracting files..."
@@ -61,6 +59,10 @@ unzip -o "$ZIP"
 mkdir /lib
 ui_print "Symlinking .so files to /lib/..."
 ln -s "$WORKING_DIR"/lib/* /lib/
+ui_print "Symlinking block devices..."
+ln -s /dev/block/* /dev/
+ui_print "Extracting partition info from fstab..."
+extract_partition_table
 ui_print "Unmounting /$INSTALL_PARTITION..."
 umount_install_partition
 ui_print "Creating partition table on $INSTALL_DEVICE..."

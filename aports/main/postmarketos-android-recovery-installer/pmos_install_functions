@@ -90,14 +90,15 @@ partition_install_device() {
 	if [ "$INSTALL_PARTITION" = "system" ]
 	then
 		kpartx -afs "$INSTALL_DEVICE"
-		ln -s /dev/mapper/* /dev/block/
 	fi
 	set_subpartitions
 }
 
 set_subpartitions() {
-	export PMOS_BOOT="$INSTALL_DEVICE"p1
-	export ROOT_PARTITION="$INSTALL_DEVICE"p2
+	export PMOS_BOOT
+	PMOS_BOOT=/dev/mapper/"$(basename "$INSTALL_DEVICE")"p1
+	export ROOT_PARTITION
+	ROOT_PARTITION=/dev/mapper/"$(basename "$INSTALL_DEVICE")"p2
 }
 
 umount_install_partition() {
