@@ -1,17 +1,16 @@
+# Contributor: Clayton Craft <clayton@craftyguy.net>
+# Maintainer: Clayton Craft <clayton@craftyguy.net>
 pkgname=directfb
 pkgver=1.7.7
 pkgrel=8
-
 pkgdesc="Library for hw graphics acceleration, input dev, windowing system on top of the Linux fb device"
 arch="all"
-
-url="http://www.directfb.org"
+url="https://github.com/DirectFB/directfb"
 license="LGPL"
 makedepends="zlib-dev freetype-dev libdrm-dev libpng-dev perl tslib tslib-dev autoconf automake libtool"
 depends="libgcc libjpeg libpng freetype libdrm tslib"
-
 subpackages="$pkgname-doc $pkgname-dev"
-
+builddir="${srcdir}/DirectFB-${pkgver}"
 source="
     http://sources.webos-ports.org/downloads/DirectFB-$pkgver.tar.gz
     0001-directfb-fix-musl-compile.patch
@@ -22,9 +21,8 @@ source="
     0006-fix-client-gfx_state-initialisation.patch
     "
 
-builddir=${srcdir}/DirectFB-${pkgver}
 build() {
-    cd ${srcdir}/DirectFB-${pkgver}
+    cd "${builddir}"
     autoconf
     ./configure --prefix=/usr \
                 --sysconfdir=/etc \
@@ -42,10 +40,16 @@ build() {
     make
 }
 
+check() {
+    cd "${builddir}"
+    make check
+}
+
 package() {
-    cd ${srcdir}/DirectFB-${pkgver}
+    cd "${builddir}"
     make DESTDIR="${pkgdir}" install
 }
+
 sha512sums="c9ce8ffe7d7d17b0351da6a031db7345f31fb7112545f9352834ad33225a93e6284ef0e576ef5fc595bc9060c1756051322fa20f7b5b3444b68d7f05bd1ba494  DirectFB-1.7.7.tar.gz
 d9325c228a534d2d2b93b4dacf896fc12c703b9e08adf1ae8f5baea2a0ed5c4d07d56b8bc63dc605362f093624eab40686b43028ef15a78a01bc10e5f41c16bc  0001-directfb-fix-musl-compile.patch
 ed3bf9bf76616174aca6ae92fd9873c9452951b8a2acb60e1ccbbea0c4a7c9766e510899bc8f58c24dd5888c1e7e1f0a0d4a823f0bd9e03a4c9d2a54fb714221  0002-Fix-musl-PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP-comp.patch
