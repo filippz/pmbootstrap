@@ -60,7 +60,11 @@ defaults = {
 
     # aes-xts-plain64 would be better, but this is not supported on LineageOS
     # kernel configs
-    "cipher": "aes-cbc-plain64"
+    "cipher": "aes-cbc-plain64",
+    # A higher value is typically desired, but this can lead to VERY long open
+    # times on slower devices due to host systems being MUCH faster than the
+    # target device: <https://github.com/postmarketOS/pmbootstrap/issues/429>
+    "iter_time": "200"
 }
 
 #
@@ -129,6 +133,14 @@ build_packages = ["abuild", "build-base", "ccache"]
 # fnmatch for supported pkgnames, that can be directly compiled inside
 # the native chroot and a cross-compiler, without using distcc
 build_cross_native = ["linux-*"]
+
+# Necessary kernel config options
+necessary_kconfig_options = {
+    "DEVTMPFS": True,
+    "DEVTMPFS_MOUNT": False,
+    "DM_CRYPT": True,
+    "VT": True,
+}
 
 
 #

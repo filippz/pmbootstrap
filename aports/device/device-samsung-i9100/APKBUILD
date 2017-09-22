@@ -1,6 +1,6 @@
 pkgname=device-samsung-i9100
 pkgver=1
-pkgrel=11
+pkgrel=12
 pkgdesc="Samsung Galaxy SII"
 url="https://github.com/postmarketOS"
 arch="noarch"
@@ -27,6 +27,6 @@ package() {
 		"$pkgdir"/etc/udev/rules.d/90-android-touch-dev.rules
 }
 
-sha512sums="fe86fbd08a7ca705b78eb4af84f7a1b3181d1c334a95e48d524121d081a85f50d891279139631ba967ce1a66721c32ea289fe6c230747588343ded832af6df29  deviceinfo
+sha512sums="6ca79453a09003d959319374d0abaac28676601f075404db078cd3757e6eab231770669b9af3c7493ac328ff16657288dcef191bd5a47a5273cd56ce7bf2366e  deviceinfo
 8aead706ddb118a44de7d049f07d10a27e727d17724058d132e4ec4fa73fed29c9ccfe03f02aca459c922ec0fbba24e171fe3c76e33f7c5462631e3dd5506e36  90-android-touch-dev.rules
 03da52725e676bc7db371cbf4b60bff8689eca469dae96a02ca7d6c194ed9f8c4ec9d19d1ac9212eeba0b73384fd213e86f2b93da94f37e5abe4cc3339281205  device-samsung-i9100.post-install"

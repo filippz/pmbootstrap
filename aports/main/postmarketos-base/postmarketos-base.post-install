@@ -9,12 +9,15 @@ done
 for service in hwclock modules sysctl hostname bootmisc syslog; do
 	rc-update -q add $service boot
 done
-for service in haveged sshd udev wpa_supplicant; do
+for service in haveged sshd udev wpa_supplicant swapfile; do
 	rc-update -q add $service default
 done
 for service in mount-ro killprocs savecache; do
 	rc-update -q add $service shutdown
 done
+if [ "${deviceinfo_msm_refresher}" = "true" ]; then
+	rc-update -q add msm-fb-refresher boot
+fi
 
 # Add user account
 adduser -u 1000 -D -h /home/user -G users user 2>/dev/null
@@ -33,7 +36,7 @@ if ! apk audit /etc | grep -q etc/motd; then
 		echo 'This distribution is based on Alpine Linux.'
 		echo 'Read both our wikis to find a large amount of how-to guides and'
 		echo 'general information about administrating and development.'
-		echo 'See <https://postmarketos.org/wiki> and <https://wiki.alpinelinux.org>.'
+		echo 'See <https://wiki.postmarketos.org> and <https://wiki.alpinelinux.org>.'
 		echo ''
 		echo 'You may change this message by editing /etc/motd.'
 		echo ''
