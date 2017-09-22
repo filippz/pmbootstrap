@@ -40,8 +40,9 @@ ui_print() {
 extract_partition_table() {
 	case "$INSTALL_PARTITION" in
 		"system")
-			# We need to resolve symlinks, to make set_subpartitions() work.
-			_INSTALL_DEVICE=$(readlink -fn "$(awk '/^\/system/ {print $3}' /etc/recovery.fstab)")
+			_INSTALL_DEVICE=$(findfs PARTLABEL="system") || \
+				# We need to resolve symlinks, to make set_subpartitions() work.
+				_INSTALL_DEVICE=$(readlink -fn "$(awk '/^\/system/ {print $3}' /etc/recovery.fstab)")
 			;;
 		"external_sd")
 			_INSTALL_DEVICE=$(readlink -fn "$(awk '/^\/external_sd/ {print $4}' /etc/recovery.fstab)")
@@ -56,7 +57,7 @@ extract_partition_table() {
 		echo "install device found at $_INSTALL_DEVICE"
 		export INSTALL_DEVICE=$_INSTALL_DEVICE
 	else
-		echo "Couldn't find /$INSTALL_PARTITION/ in fstab."
+		echo "Couldn't find $INSTALL_PARTITION partition."
 		return 1
 	fi
 	if [ "$ISOREC" = "true" ]
@@ -66,13 +67,14 @@ extract_partition_table() {
 		export INITFS_PARTITION
 		INITFS_PARTITION=$(findfs PARTLABEL="$INITFS_PARTLABEL")
 	else
-		_BOOT_PARTITION=$(awk '/^\/boot/ {print $3}' /etc/recovery.fstab)
+		_BOOT_PARTITION=$(findfs PARTLABEL="boot") || \
+			_BOOT_PARTITION=$(awk '/^\/boot/ {print $3}' /etc/recovery.fstab)
 		if [ ! -z "$_BOOT_PARTITION" ]
 		then
 			echo "boot partition found at $_BOOT_PARTITION"
 			export BOOT_PARTITION=$_BOOT_PARTITION
 		else
-			echo "Couldn't find /boot/ in fstab."
+			echo "Couldn't find boot partition."
 			return 1
 		fi
 	fi

@@ -61,7 +61,7 @@ ui_print "Symlinking .so files to /lib/..."
 ln -s "$WORKING_DIR"/lib/* /lib/
 ui_print "Symlinking block devices..."
 ln -s /dev/block/* /dev/
-ui_print "Extracting partition info from fstab..."
+ui_print "Extracting partition table..."
 extract_partition_table
 ui_print "Unmounting /$INSTALL_PARTITION..."
 umount_install_partition
