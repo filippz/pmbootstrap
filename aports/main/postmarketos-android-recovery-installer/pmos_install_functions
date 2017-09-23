@@ -42,10 +42,10 @@ extract_partition_table() {
 		"system")
 			_INSTALL_DEVICE=$(findfs PARTLABEL="$SYSTEM_PARTLABEL") || \
 				# We need to resolve symlinks, to make set_subpartitions() work.
-				_INSTALL_DEVICE=$(readlink -fn "$(awk '/^\/system/ {print $3}' /etc/recovery.fstab)")
+				_INSTALL_DEVICE=$(busybox readlink -fn "$(busybox awk '/^\/system/ {print $3}' /etc/recovery.fstab)")
 			;;
 		"external_sd")
-			_INSTALL_DEVICE=$(readlink -fn "$(awk '/^\/external_sd/ {print $4}' /etc/recovery.fstab)")
+			_INSTALL_DEVICE=$(busybox readlink -fn "$(busybox awk '/^\/external_sd/ {print $4}' /etc/recovery.fstab)")
 			;;
 		*)
 			echo "No support for flashing $INSTALL_PARTITION."
@@ -68,7 +68,7 @@ extract_partition_table() {
 		INITFS_PARTITION=$(findfs PARTLABEL="$INITFS_PARTLABEL")
 	else
 		_BOOT_PARTITION=$(findfs PARTLABEL="boot") || \
-			_BOOT_PARTITION=$(awk '/^\/boot/ {print $3}' /etc/recovery.fstab)
+			_BOOT_PARTITION=$(busybox awk '/^\/boot/ {print $3}' /etc/recovery.fstab)
 		if [ ! -z "$_BOOT_PARTITION" ]
 		then
 			echo "boot partition found at $_BOOT_PARTITION"
@@ -98,13 +98,13 @@ partition_install_device() {
 
 set_subpartitions() {
 	export PMOS_BOOT
-	PMOS_BOOT=/dev/mapper/"$(basename "$INSTALL_DEVICE")"p1
+	PMOS_BOOT=/dev/mapper/"$(busybox basename "$INSTALL_DEVICE")"p1
 	export ROOT_PARTITION
-	ROOT_PARTITION=/dev/mapper/"$(basename "$INSTALL_DEVICE")"p2
+	ROOT_PARTITION=/dev/mapper/"$(busybox basename "$INSTALL_DEVICE")"p2
 }
 
 umount_install_partition() {
-	if mountpoint -q "/$INSTALL_PARTITION/"
+	if busybox mountpoint -q "/$INSTALL_PARTITION/"
 	then
 		umount /"$INSTALL_PARTITION"/
 	else
