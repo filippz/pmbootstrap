@@ -75,6 +75,11 @@ def list_devices(args):
 
 
 def sideload(args):
+    cfg = pmb.config.flashers["adb"]
+
+    # Install depends
+    pmb.chroot.apk.install(args, cfg["depends"])
+
     # Mount the buildroot
     suffix = "buildroot_" + args.deviceinfo["arch"]
     mountpoint = "/mnt/" + suffix
