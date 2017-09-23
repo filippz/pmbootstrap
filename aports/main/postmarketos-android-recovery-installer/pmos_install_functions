@@ -40,7 +40,7 @@ ui_print() {
 extract_partition_table() {
 	case "$INSTALL_PARTITION" in
 		"system")
-			_INSTALL_DEVICE=$(findfs PARTLABEL="system") || \
+			_INSTALL_DEVICE=$(findfs PARTLABEL="$SYSTEM_PARTLABEL") || \
 				# We need to resolve symlinks, to make set_subpartitions() work.
 				_INSTALL_DEVICE=$(readlink -fn "$(awk '/^\/system/ {print $3}' /etc/recovery.fstab)")
 			;;

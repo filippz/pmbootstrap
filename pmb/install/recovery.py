@@ -19,6 +19,7 @@ along with pmbootstrap.  If not, see <http://www.gnu.org/licenses/>.
 import logging
 
 import pmb.chroot
+import pmb.flasher
 import pmb.helpers.frontend
 
 
@@ -29,6 +30,8 @@ def create_zip(args, suffix):
     zip_root = "/var/lib/postmarketos-android-recovery-installer/"
     rootfs = "/mnt/rootfs_" + args.device
     flavor = pmb.helpers.frontend._parse_flavor(args)
+    method = args.deviceinfo["flash_methods"]
+    vars = pmb.flasher.variables(args, flavor, method)
 
     # Install recovery installer package in buildroot
     pmb.chroot.apk.install(args,
@@ -45,17 +48,14 @@ def create_zip(args, suffix):
                        'FLAVOR="{}"'.format(flavor),
                        'FLASH_KERNEL="{}"'.format(
                            str(args.recovery_flash_kernel).lower()),
-                       'ISOREC="{}"'.format(
-                           str(args.deviceinfo["flash_methods"] ==
-                               "heimdall-isorec").lower()),
+                       'ISOREC="{}"'.format(str(method == "heimdall-isorec")
+                                            .lower()),
                        'KERNEL_PARTLABEL="{}"'.format(
-                           args.deviceinfo["heimdall_partition_kernel"]
-                       if args.deviceinfo["flash_methods"] == "heimdall_isorec"
-                       else ""),
+                           vars["$PARTITION_KERNEL"]),
                        'INITFS_PARTLABEL="{}"'.format(
-                           args.deviceinfo["heimdall_partition_initfs"]
-                       if args.deviceinfo["flash_methods"] == "heimdall_isorec"
-                       else ""),
+                           vars["$PARTITION_INITFS"]),
+                       'SYSTEM_PARTLABEL="{}"'.format(
+                           vars["$PARTITION_SYSTEM"]),
                        'INSTALL_PARTITION="{}"'.format(
                            args.recovery_install_partition),
                        'CIPHER="{}"'.format(args.cipher),
