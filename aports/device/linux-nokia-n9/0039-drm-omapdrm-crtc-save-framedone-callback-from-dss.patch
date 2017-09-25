@@ -1,0 +1,64 @@
+From 6bafef6bf168fd82ba2a4c514d75d77d6aa7a6bd Mon Sep 17 00:00:00 2001
+From: Sebastian Reichel <sre@kernel.org>
+Date: Wed, 2 Mar 2016 17:10:04 +0100
+Subject: [PATCH 39/53] drm: omapdrm: crtc: save framedone callback from dss
+
+Save the framedone callback supplied by dss for later
+usage.
+
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/gpu/drm/omapdrm/omap_crtc.c | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/drivers/gpu/drm/omapdrm/omap_crtc.c b/drivers/gpu/drm/omapdrm/omap_crtc.c
+index 25df89457c39..0f457e72b171 100644
+--- a/drivers/gpu/drm/omapdrm/omap_crtc.c
++++ b/drivers/gpu/drm/omapdrm/omap_crtc.c
+@@ -50,6 +50,9 @@ struct omap_crtc {
+
+	unsigned long state;
+	wait_queue_head_t pending_wait;
++
++	void (*framedone_handler)(void *);
++	void *framedone_handler_data;
+ };
+
+ /* -----------------------------------------------------------------------------
+@@ -266,6 +269,17 @@ static int omap_crtc_dss_register_framedone(
+		enum omap_channel channel,
+		void (*handler)(void *), void *data)
+ {
++	struct omap_crtc *omap_crtc = omap_crtcs[channel];
++	struct drm_device *dev = omap_crtc->base.dev;
++
++	if (omap_crtc->framedone_handler)
++		return -EBUSY;
++
++	dev_dbg(dev->dev, "register framedone %s", omap_crtc->name);
++
++	omap_crtc->framedone_handler = handler;
++	omap_crtc->framedone_handler_data = data;
++
+	return 0;
+ }
+
+@@ -273,6 +287,16 @@ static void omap_crtc_dss_unregister_framedone(
+		enum omap_channel channel,
+		void (*handler)(void *), void *data)
+ {
++	struct omap_crtc *omap_crtc = omap_crtcs[channel];
++	struct drm_device *dev = omap_crtc->base.dev;
++
++	dev_dbg(dev->dev, "unregister framedone %s", omap_crtc->name);
++
++	WARN_ON(omap_crtc->framedone_handler != handler);
++	WARN_ON(omap_crtc->framedone_handler_data != data);
++
++	omap_crtc->framedone_handler = NULL;
++	omap_crtc->framedone_handler_data = NULL;
+ }
+
+ static const struct dss_mgr_ops mgr_ops = {
+--
+2.11.0

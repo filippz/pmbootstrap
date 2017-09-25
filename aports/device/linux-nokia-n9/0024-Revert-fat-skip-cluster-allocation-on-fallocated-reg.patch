@@ -1,0 +1,42 @@
+From 0cf810a4309452227b1ee120e656eda4ba93b5df Mon Sep 17 00:00:00 2001
+From: filippz <filip.matijevic.pz@gmail.com>
+Date: Thu, 18 Feb 2016 07:24:19 +0100
+Subject: [PATCH 24/53] Revert "fat: skip cluster allocation on fallocated
+ region"
+
+This reverts commit 7e0f236b5b9cc23aa004eb58ee2201f294d0422a.
+---
+ fs/fat/inode.c | 10 ++--------
+ 1 file changed, 2 insertions(+), 8 deletions(-)
+
+diff --git a/fs/fat/inode.c b/fs/fat/inode.c
+index 46e4173bc941..e4b43da3e5cb 100644
+--- a/fs/fat/inode.c
++++ b/fs/fat/inode.c
+@@ -115,7 +115,7 @@ static inline int __fat_get_block(struct inode *inode, sector_t iblock,
+	struct super_block *sb = inode->i_sb;
+	struct msdos_sb_info *sbi = MSDOS_SB(sb);
+	unsigned long mapped_blocks;
+-	sector_t phys, last_block;
++	sector_t phys;
+	int err, offset;
+
+	err = fat_bmap(inode, iblock, &phys, &mapped_blocks, create);
+@@ -135,14 +135,8 @@ static inline int __fat_get_block(struct inode *inode, sector_t iblock,
+		return -EIO;
+	}
+
+-	last_block = inode->i_blocks >> (sb->s_blocksize_bits - 9);
+	offset = (unsigned long)iblock & (sbi->sec_per_clus - 1);
+-	/*
+-	 * allocate a cluster according to the following.
+-	 * 1) no more available blocks
+-	 * 2) not part of fallocate region
+-	 */
+-	if (!offset && !(iblock < last_block)) {
++	if (!offset) {
+		/* TODO: multiple cluster allocation would be desirable. */
+		err = fat_add_cluster(inode);
+		if (err)
+--
+2.11.0

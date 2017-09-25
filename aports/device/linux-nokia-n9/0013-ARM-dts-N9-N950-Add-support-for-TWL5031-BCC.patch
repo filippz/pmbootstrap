@@ -1,0 +1,30 @@
+From 06d8faa4b575de5c46437d2091c2e439f0cba3c0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Filip=20Matijevi=C4=87?= <filip.matijevic.pz@gmail.com>
+Date: Fri, 1 Jul 2016 18:51:43 +0200
+Subject: [PATCH 13/53] ARM: dts: N9/N950: Add support for TWL5031 BCC
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Filip Matijević <filip.matijevic.pz@gmail.com>
+---
+ arch/arm/boot/dts/omap3-n950-n9.dtsi | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm/boot/dts/omap3-n950-n9.dtsi b/arch/arm/boot/dts/omap3-n950-n9.dtsi
+index 87c360d0ee59..6e1cc4bafb63 100644
+--- a/arch/arm/boot/dts/omap3-n950-n9.dtsi
++++ b/arch/arm/boot/dts/omap3-n950-n9.dtsi
+@@ -182,6 +182,10 @@
+
+ /include/ "twl4030.dtsi"
+
++&charger {
++	compatible =  "ti,twl5031-bcc";
++};
++
+ &twl {
+	compatible = "ti,twl5031";
+
+--
+2.11.0

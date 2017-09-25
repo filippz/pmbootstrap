@@ -1,0 +1,75 @@
+From 394bd97236525eb8b03d6b269af93dc809220cfc Mon Sep 17 00:00:00 2001
+From: Sebastian Reichel <sre@kernel.org>
+Date: Wed, 2 Mar 2016 18:37:29 +0100
+Subject: [PATCH 48/53] drm: omapdrm: panel-dsi-cm: provide timings methods for
+ omapdrm
+
+Provide omapdrm with methods to acquire timings
+and check them later, so that it can properly
+initialize the display.
+
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c | 40 +++++++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
+diff --git a/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c b/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
+index 1d3e391d2000..13937a7bbf8f 100644
+--- a/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
++++ b/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
+@@ -1162,6 +1162,43 @@ static void dsicm_ulps_work(struct work_struct *work)
+	mutex_unlock(&ddata->lock);
+ }
+
++static void dsicm_get_timings(struct omap_dss_device *dssdev,
++		struct videomode *vm)
++{
++	struct panel_drv_data *ddata = to_panel_data(dssdev);
++
++	*vm = ddata->vm;
++}
++
++static int dsicm_check_timings(struct omap_dss_device *dssdev,
++		struct omap_video_timings *timings)
++{
++	struct panel_drv_data *ddata = to_panel_data(dssdev);
++	int ret = 0;
++
++	if (vm->vactive != ddata->vm.vactive)
++		ret = -EINVAL;
++	else if (vm->hactive != ddata->vm.hactive)
++		ret = -EINVAL;
++
++	/* pixelclock is modified by dsi, so not easily checkable */
++
++	/* vfront_porch, vback_porch, hfront_porch, hback_porch are
++	 * (re-)configured automatically by dsi
++	 */
++
++	if (ret) {
++		dev_warn(dssdev->dev, "wrong resolution: %d x %d",
++			vm->vactive, vm->hactive);
++		dev_warn(dssdev->dev, "panel resolution: %d x %d",
++			ddata->vm.vactive, ddata->vm.hactive);
++	} else {
++		dev_dbg(dssdev->dev, "mode check: ok");
++	}
++
++	return ret;
++}
++
+ static struct omap_dss_driver dsicm_ops = {
+	.connect	= dsicm_connect,
+	.disconnect	= dsicm_disconnect,
+@@ -1179,6 +1216,9 @@ static struct omap_dss_driver dsicm_ops = {
+	.get_te		= dsicm_get_te,
+
+	.memory_read	= dsicm_memory_read,
++
++	.get_timings	= dsicm_get_timings,
++	.check_timings	= dsicm_check_timings,
+ };
+
+ static int dsicm_probe_of(struct platform_device *pdev)
+--
+2.11.0

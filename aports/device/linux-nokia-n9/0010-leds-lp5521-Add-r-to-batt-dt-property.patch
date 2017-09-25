@@ -1,0 +1,83 @@
+From c8b9ffbd0b354c88b21e7e6b8806926fd6a94cef Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Filip=20Matijevi=C4=87?= <filip.matijevic.pz@gmail.com>
+Date: Sun, 22 Nov 2015 19:40:31 +0100
+Subject: [PATCH 10/53] leds: lp5521: Add r-to-batt dt property
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add r-to-batt dt property wich sets LP5521_R_TO_BATT on LP5521 needed by
+Nokia N9 (RM-696)
+
+Signed-off-by: Filip Matijević <filip.matijevic.pz@gmail.com>
+---
+ Documentation/devicetree/bindings/leds/leds-lp55xx.txt | 1 +
+ drivers/leds/leds-lp5521.c                             | 3 +++
+ drivers/leds/leds-lp55xx-common.c                      | 4 ++++
+ include/linux/platform_data/leds-lp55xx.h              | 3 +++
+ 4 files changed, 11 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/leds/leds-lp55xx.txt b/Documentation/devicetree/bindings/leds/leds-lp55xx.txt
+index 1b66a413fb9d..6343a95a515a 100644
+--- a/Documentation/devicetree/bindings/leds/leds-lp55xx.txt
++++ b/Documentation/devicetree/bindings/leds/leds-lp55xx.txt
+@@ -23,6 +23,7 @@ Optional properties:
+          1: D1~6 with VDD, D7~9 with VOUT
+          2: D1~6 with VOUT, D7~9 with VDD
+          3: D1~9 are connected to VOUT
++- r-to-batt: LP5521 specific property. Add LP5521_R_TO_BATT to LP5521_DEFAULT_CFG.
+
+ Alternatively, each child can have a specific channel name and trigger:
+ - chan-name (optional): name of channel
+diff --git a/drivers/leds/leds-lp5521.c b/drivers/leds/leds-lp5521.c
+index 549b315ca8fe..e7e4688683ee 100644
+--- a/drivers/leds/leds-lp5521.c
++++ b/drivers/leds/leds-lp5521.c
+@@ -292,6 +292,7 @@ static void lp5521_firmware_loaded(struct lp55xx_chip *chip)
+
+ static int lp5521_post_init_device(struct lp55xx_chip *chip)
+ {
++	struct lp55xx_platform_data *pdata = chip->pdata;
+	int ret;
+	u8 val;
+
+@@ -320,6 +321,8 @@ static int lp5521_post_init_device(struct lp55xx_chip *chip)
+
+	/* Update configuration for the clock setting */
+	val = LP5521_DEFAULT_CFG;
++	if (pdata->r_to_batt)
++		val |= LP5521_R_TO_BATT;
+	if (!lp55xx_is_extclk_used(chip))
+		val |= LP5521_CLK_INT;
+
+diff --git a/drivers/leds/leds-lp55xx-common.c b/drivers/leds/leds-lp55xx-common.c
+index 5377f22ff994..4a4b2e65a29f 100644
+--- a/drivers/leds/leds-lp55xx-common.c
++++ b/drivers/leds/leds-lp55xx-common.c
+@@ -587,6 +587,10 @@ struct lp55xx_platform_data *lp55xx_of_populate_pdata(struct device *dev,
+	/* LP8501 specific */
+	of_property_read_u8(np, "pwr-sel", (u8 *)&pdata->pwr_sel);
+
++	/* LP5521 specific */
++	if (of_property_read_bool(np, "r-to-batt"))
++		pdata->r_to_batt = true;
++
+	return pdata;
+ }
+ EXPORT_SYMBOL_GPL(lp55xx_of_populate_pdata);
+diff --git a/include/linux/platform_data/leds-lp55xx.h b/include/linux/platform_data/leds-lp55xx.h
+index 624ff9edad6f..7253b7403e11 100644
+--- a/include/linux/platform_data/leds-lp55xx.h
++++ b/include/linux/platform_data/leds-lp55xx.h
+@@ -76,6 +76,9 @@ struct lp55xx_platform_data {
+
+	/* LP8501 specific */
+	enum lp8501_pwr_sel pwr_sel;
++
++	/* LP5521 specific */
++	bool r_to_batt;
+ };
+
+ #endif /* _LEDS_LP55XX_H */
+--
+2.11.0

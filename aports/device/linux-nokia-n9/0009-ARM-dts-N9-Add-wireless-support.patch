@@ -1,0 +1,104 @@
+From 549a5e01cf52fc47fdb76978da10c1259af344e0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Filip=20Matijevi=C4=87?= <filip.matijevic.pz@gmail.com>
+Date: Fri, 20 Nov 2015 07:35:57 +0100
+Subject: [PATCH 09/53] ARM: dts: N9: Add wireless support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Filip Matijević <filip.matijevic.pz@gmail.com>
+---
+ arch/arm/boot/dts/omap3-n9.dts       | 35 +++++++++++++++++++++++++++++++++++
+ arch/arm/boot/dts/omap3-n950-n9.dtsi |  4 ----
+ arch/arm/boot/dts/omap3-n950.dts     |  4 ++++
+ 3 files changed, 39 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm/boot/dts/omap3-n9.dts b/arch/arm/boot/dts/omap3-n9.dts
+index 2f92fec9c7c0..cd4c6101b8b2 100644
+--- a/arch/arm/boot/dts/omap3-n9.dts
++++ b/arch/arm/boot/dts/omap3-n9.dts
+@@ -1,3 +1,4 @@
++
+ /*
+  * omap3-n9.dts - Device Tree file for Nokia N9
+  *
+@@ -18,6 +19,19 @@
+	compatible = "nokia,omap3-n9", "ti,omap36xx", "ti,omap3";
+ };
+
++&omap3_pmx_core {
++	mmc3_pins: pinmux_mmc3_pins {
++		pinctrl-single,pins = <
++			OMAP3_CORE1_IOPAD(0x21d0, PIN_INPUT_PULLUP | MUX_MODE3) /* mcspi1_cs1.sdmmc3_cmd */
++			OMAP3_CORE1_IOPAD(0x21d2, PIN_INPUT_PULLUP | MUX_MODE3) /* mcspi1_cs1.sdmmc3_clk */
++			OMAP3_CORE1_IOPAD(0x2164, PIN_INPUT_PULLUP | MUX_MODE3) /* sdmmc2_dat4.sdmmc3_dat0 */
++			OMAP3_CORE1_IOPAD(0x2166, PIN_INPUT_PULLUP | MUX_MODE3) /* sdmmc2_dat5.sdmmc3_dat1 */
++			OMAP3_CORE1_IOPAD(0x2168, PIN_INPUT_PULLUP | MUX_MODE3) /* sdmmc2_dat6.sdmmc3_dat2 */
++			OMAP3_CORE1_IOPAD(0x216a, PIN_INPUT_PULLUP | MUX_MODE3) /* sdmmc2_dat7.sdmmc3_dat3 */
++		>;
++	};
++};
++
+ &i2c2 {
+	smia_1: camera@10 {
+		compatible = "nokia,smia";
+@@ -50,6 +64,27 @@
+	};
+ };
+
++&mmc3 {
++	vmmc-supply = <&vwlan_fixed>;
++	non-removable;
++	bus-width = <4>;
++	cap-power-off-card;
++	pinctrl-names = "default";
++	pinctrl-0 = <&mmc3_pins>;
++
++	#address-cells = <1>;
++	#size-cells = <0>;
++	wlcore: wlcore@2 {
++		compatible = "ti,wl1271";
++		pinctrl-names = "default";
++		pinctrl-0 = <&wlan_pins>;
++		reg = <2>;
++		interrupt-parent = <&gpio2>;
++		interrupts = <10 IRQ_TYPE_LEVEL_HIGH>; /* gpio_42 */
++		ref-clock-frequency = <38400000>;
++	};
++};
++
+ &isp {
+	vdd-csiphy1-supply = <&vaux2>;
+	vdd-csiphy2-supply = <&vaux2>;
+diff --git a/arch/arm/boot/dts/omap3-n950-n9.dtsi b/arch/arm/boot/dts/omap3-n950-n9.dtsi
+index aaaccf9ff773..cb486ba092fd 100644
+--- a/arch/arm/boot/dts/omap3-n950-n9.dtsi
++++ b/arch/arm/boot/dts/omap3-n950-n9.dtsi
+@@ -348,10 +348,6 @@
+	ti,non-removable;
+ };
+
+-&mmc3 {
+-	status = "disabled";
+-};
+-
+ &usb_otg_hs {
+	interface-type = <0>;
+	usb-phy = <&usb2_phy>;
+diff --git a/arch/arm/boot/dts/omap3-n950.dts b/arch/arm/boot/dts/omap3-n950.dts
+index af81eedbc102..dfafdd472deb 100644
+--- a/arch/arm/boot/dts/omap3-n950.dts
++++ b/arch/arm/boot/dts/omap3-n950.dts
+@@ -83,6 +83,10 @@
+	};
+ };
+
++&mmc3 {
++	status = "disabled";
++};
++
+ &isp {
+	vdd-csiphy1-supply = <&vaux2>;
+	vdd-csiphy2-supply = <&vaux2>;
+--
+2.11.0

@@ -1,0 +1,33 @@
+From 7a8ea97bf8403af6246dd55a510b2eea066e3578 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Filip=20Matijevi=C4=87?= <filip.matijevic.pz@gmail.com>
+Date: Tue, 12 Jul 2016 20:49:45 +0200
+Subject: [PATCH 50/53] ARM: N9/N950: add additional DT data for panel-dsi-cm
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Filip Matijević <filip.matijevic.pz@gmail.com>
+---
+ arch/arm/boot/dts/omap3-n950-n9.dtsi | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/arch/arm/boot/dts/omap3-n950-n9.dtsi b/arch/arm/boot/dts/omap3-n950-n9.dtsi
+index 6c4752746296..d7ecf941a32c 100644
+--- a/arch/arm/boot/dts/omap3-n950-n9.dtsi
++++ b/arch/arm/boot/dts/omap3-n950-n9.dtsi
+@@ -648,6 +648,13 @@
+		reset-gpios = <&gpio3 23 GPIO_ACTIVE_HIGH>; /* gpio_87 */
+		te-gpios = <&gpio2 30 GPIO_ACTIVE_HIGH>; /* gpio_62 */
+
++		/* panel is 480x864 with bottom 10 lines not visible */
++		/* physical dimensions: 48240µm x 86832µm */
++		resolution-x = <480>;
++		resolution-y = <854>;
++		offset-x = <0>;
++		offset-y = <0>;
++
+		port {
+			lcd0_in: endpoint {
+				remote-endpoint = <&dsi_out_ep>;
+--
+2.11.0

@@ -1,0 +1,82 @@
+From cde1c46373042a03c1959a93cb13f121e37f9828 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Filip=20Matijevi=C4=87?= <filip.matijevic.pz@gmail.com>
+Date: Thu, 10 Mar 2016 19:25:21 +0100
+Subject: [PATCH 29/53] ARM: dts: N9: Add support for apds990x ALS/PS
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Filip Matijević <filip.matijevic.pz@gmail.com>
+---
+ arch/arm/boot/dts/omap3-n9.dts       | 23 +++++++++++++++++++++++
+ arch/arm/boot/dts/omap3-n950-n9.dtsi | 14 ++++++++++++++
+ 2 files changed, 37 insertions(+)
+
+diff --git a/arch/arm/boot/dts/omap3-n9.dts b/arch/arm/boot/dts/omap3-n9.dts
+index 9c51ba219af1..1b0c91d26399 100644
+--- a/arch/arm/boot/dts/omap3-n9.dts
++++ b/arch/arm/boot/dts/omap3-n9.dts
+@@ -84,6 +84,29 @@
+			max-cur = /bits/ 8 <0x82>; /* 130 = 13 mA */
+		};
+	};
++
++	als_ps@39 {
++		compatible = "avago,apds990x";
++		reg = <0x39>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&als_ps_gpio>;
++
++		interrupt-parent = <&gpio3>;
++		interrupts = <19 10>; /* gpio_83, IRQF_TRIGGER_FALLING | IRQF_TRIGGER_LOW */
++
++		Vdd-supply = <&vaux1>;
++		Vled-supply = <&vbat>;
++
++		ga	= <168834>;
++		cf1	= <4096>;
++		irf1	= <7824>;
++		cf2	= <877>;
++		irf2	= <1575>;
++		df	= <52>;
++
++		pdrive	= /bits/ 8 <2>; /* APDS_IRLED_CURR_25mA */
++		ppcount	= /bits/ 8 <5>;
++	};
+ };
+
+ &i2c3 {
+diff --git a/arch/arm/boot/dts/omap3-n950-n9.dtsi b/arch/arm/boot/dts/omap3-n950-n9.dtsi
+index 5b98fc0dd54b..6c4752746296 100644
+--- a/arch/arm/boot/dts/omap3-n950-n9.dtsi
++++ b/arch/arm/boot/dts/omap3-n950-n9.dtsi
+@@ -43,6 +43,14 @@
+		enable-active-high;
+	};
+
++	vbat: fixedregulator1 {
++		compatible = "regulator-fixed";
++		regulator-name = "VBAT";
++		regulator-min-microvolt = <3700000>;
++		regulator-max-microvolt = <3700000>;
++		regulator-boot-on;
++	};
++
+	vwlan_fixed: fixedregulator2 {
+		compatible = "regulator-fixed";
+		regulator-name = "VWLAN";
+@@ -208,6 +216,12 @@
+			OMAP3_CORE1_IOPAD(0x2086, PIN_INPUT  | MUX_MODE4)	/* gpmc_a7.gpio_40 -> TVOUT_EN */
+		>;
+	};
++
++	als_ps_gpio: pinmux_als_ps_gpio {
++		pinctrl-single,pins = <
++			OMAP3_CORE1_IOPAD(0x20f6, PIN_INPUT | MUX_MODE4)	/* dss_data13.gpio_83 -> APDS990X/BHSFH IRQ */
++		>;
++	};
+ };
+
+ &omap3_pmx_core2 {
+--
+2.11.0

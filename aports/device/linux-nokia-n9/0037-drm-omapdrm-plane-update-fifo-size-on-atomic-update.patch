@@ -1,0 +1,69 @@
+From 940e8c11f2c10dc8f59ab78339ba03ce3b83df8f Mon Sep 17 00:00:00 2001
+From: Sebastian Reichel <sre@kernel.org>
+Date: Mon, 29 Feb 2016 09:19:59 +0100
+Subject: [PATCH 37/53] drm: omapdrm: plane: update fifo size on atomic update
+
+This is a workaround for a hardware bug occuring
+on OMAP3 with manually updated panels.
+
+Signed-off-By: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/gpu/drm/omapdrm/omap_drv.h   |  1 +
+ drivers/gpu/drm/omapdrm/omap_plane.c | 23 +++++++++++++++++++++++
+ 2 files changed, 24 insertions(+)
+
+diff --git a/drivers/gpu/drm/omapdrm/omap_drv.h b/drivers/gpu/drm/omapdrm/omap_drv.h
+index 3d3f647fc5ff..86ae345df140 100644
+--- a/drivers/gpu/drm/omapdrm/omap_drv.h
++++ b/drivers/gpu/drm/omapdrm/omap_drv.h
+@@ -162,6 +162,7 @@ struct drm_plane *omap_plane_init(struct drm_device *dev,
+		u32 possible_crtcs);
+ void omap_plane_install_properties(struct drm_plane *plane,
+		struct drm_mode_object *obj);
++void omap_plane_update_fifo(struct drm_plane *plane);
+
+ struct drm_encoder *omap_encoder_init(struct drm_device *dev,
+		struct omap_dss_device *dssdev);
+diff --git a/drivers/gpu/drm/omapdrm/omap_plane.c b/drivers/gpu/drm/omapdrm/omap_plane.c
+index 82b2c23d6769..1f4f27424d61 100644
+--- a/drivers/gpu/drm/omapdrm/omap_plane.c
++++ b/drivers/gpu/drm/omapdrm/omap_plane.c
+@@ -75,6 +75,28 @@ static void omap_plane_cleanup_fb(struct drm_plane *plane,
+		omap_framebuffer_unpin(old_state->fb);
+ }
+
++void omap_plane_update_fifo(struct drm_plane *plane)
++{
++	struct omap_plane *omap_plane = to_omap_plane(plane);
++	struct drm_plane_state *state = plane->state;
++	struct drm_device *dev = plane->dev;
++	bool use_fifo_merge = false;
++	u32 fifo_low, fifo_high;
++	bool use_manual_update;
++
++	if (!dispc_ovl_enabled(omap_plane->id))
++		return;
++
++	use_manual_update = omap_crtc_is_manual_updated(state->crtc);
++
++	dispc_ovl_compute_fifo_thresholds(omap_plane->id, &fifo_low, &fifo_high,
++			use_fifo_merge, use_manual_update);
++
++	dev_dbg(dev->dev, "update fifo: %d %d", fifo_low, fifo_high);
++
++	dispc_ovl_set_fifo_threshold(omap_plane->id, fifo_low, fifo_high);
++}
++
+ static void omap_plane_atomic_update(struct drm_plane *plane,
+				     struct drm_plane_state *old_state)
+ {
+@@ -139,6 +161,7 @@ static void omap_plane_atomic_update(struct drm_plane *plane,
+	}
+
+	dispc_ovl_enable(omap_plane->id, true);
++	omap_plane_update_fifo(plane);
+ }
+
+ static void omap_plane_atomic_disable(struct drm_plane *plane,
+--
+2.11.0

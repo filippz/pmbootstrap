@@ -1,0 +1,137 @@
+From 465951b5a5522dfc6bc90e555949346cba51af10 Mon Sep 17 00:00:00 2001
+From: Sebastian Reichel <sre@kernel.org>
+Date: Wed, 2 Mar 2016 17:04:43 +0100
+Subject: [PATCH 35/53] drm: omapdrm: crtc: detect manually updated displays
+
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/gpu/drm/omapdrm/omap_connector.c |  7 +++++++
+ drivers/gpu/drm/omapdrm/omap_crtc.c      | 36 +++++++++++++++++++++++++++++++-
+ drivers/gpu/drm/omapdrm/omap_drv.h       |  2 ++
+ 3 files changed, 44 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/omapdrm/omap_connector.c b/drivers/gpu/drm/omapdrm/omap_connector.c
+index b2dd7487157a..7709f27cbf8d 100644
+--- a/drivers/gpu/drm/omapdrm/omap_connector.c
++++ b/drivers/gpu/drm/omapdrm/omap_connector.c
+@@ -35,6 +35,13 @@ struct omap_connector {
+	bool hdmi_mode;
+ };
+
++bool omap_connector_get_manually_updated(struct drm_connector *connector)
++{
++	struct omap_connector *omap_connector = to_omap_connector(connector);
++
++	return !!(omap_connector->dssdev->caps & OMAP_DSS_DISPLAY_CAP_MANUAL_UPDATE);
++}
++
+ bool omap_connector_get_hdmi_mode(struct drm_connector *connector)
+ {
+	struct omap_connector *omap_connector = to_omap_connector(connector);
+diff --git a/drivers/gpu/drm/omapdrm/omap_crtc.c b/drivers/gpu/drm/omapdrm/omap_crtc.c
+index 70081a5e8f7f..337a7a0678b4 100644
+--- a/drivers/gpu/drm/omapdrm/omap_crtc.c
++++ b/drivers/gpu/drm/omapdrm/omap_crtc.c
+@@ -41,6 +41,8 @@ struct omap_crtc {
+
+	struct videomode vm;
+
++	bool manually_updated;
++
+	struct omap_drm_irq vblank_irq;
+	struct omap_drm_irq error_irq;
+
+@@ -86,6 +88,12 @@ int omap_crtc_wait_pending(struct drm_crtc *crtc)
+				  msecs_to_jiffies(250));
+ }
+
++bool omap_crtc_is_manual_updated(struct drm_crtc *crtc)
++{
++	struct omap_crtc *omap_crtc = to_omap_crtc(crtc);
++	return omap_crtc->manually_updated;
++}
++
+ /* -----------------------------------------------------------------------------
+  * DSS Manager Functions
+  */
+@@ -156,6 +164,11 @@ static void omap_crtc_set_enabled(struct drm_crtc *crtc, bool enable)
+		omap_crtc->ignore_digit_sync_lost = true;
+	}
+
++	if (omap_crtc->manually_updated) {
++		dev_dbg(dev->dev, "stallmode detected, not waiting for irq");
++		return;
++	}
++
+	framedone_irq = dispc_mgr_get_framedone_irq(channel);
+	vsync_irq = dispc_mgr_get_vsync_irq(channel);
+
+@@ -235,7 +248,13 @@ static void omap_crtc_dss_set_lcd_config(enum omap_channel channel,
+		const struct dss_lcd_mgr_config *config)
+ {
+	struct omap_crtc *omap_crtc = omap_crtcs[channel];
+-	DBG("%s", omap_crtc->name);
++	struct drm_device *dev = omap_crtc->base.dev;
++	struct drm_plane *plane;
++
++	dev_dbg(dev->dev, "set lcd config for %s", omap_crtc->name);
++
++	omap_crtc->manually_updated = dss_lcd_mgr_config_get_stallmode(config);
++
+	dispc_mgr_set_lcd_config(omap_crtc->channel, config);
+ }
+
+@@ -343,9 +362,21 @@ static void omap_crtc_enable(struct drm_crtc *crtc)
+ {
+	struct omap_crtc *omap_crtc = to_omap_crtc(crtc);
+	struct drm_device *dev = crtc->dev;
++	struct drm_connector *connector;
+
+	DBG("%s", omap_crtc->name);
+
++	/* manual updated display will not trigger vsync irq */
++	/* omap_crtc->manually_updated is not yet set */
++	drm_for_each_connector(connector, crtc->dev) {
++		if (connector->state->crtc != crtc)
++			continue;
++		if (!omap_connector_get_manually_updated(connector))
++			continue;
++		dev_dbg(dev->dev, "manually updated display detected!");
++		return;
++	}
++
+	if (test_and_set_bit(crtc_pending, &omap_crtc->state))
+		dev_warn(dev->dev, "crtc enable while pending bit set!");
+
+@@ -421,6 +452,9 @@ static void omap_crtc_atomic_flush(struct drm_crtc *crtc,
+		dispc_mgr_set_gamma(omap_crtc->channel, lut, length);
+	}
+
++	if (omap_crtc->manually_updated)
++		return;
++
+	if (dispc_mgr_is_enabled(omap_crtc->channel)) {
+
+		DBG("%s: GO", omap_crtc->name);
+diff --git a/drivers/gpu/drm/omapdrm/omap_drv.h b/drivers/gpu/drm/omapdrm/omap_drv.h
+index 58839f530dbf..3d3f647fc5ff 100644
+--- a/drivers/gpu/drm/omapdrm/omap_drv.h
++++ b/drivers/gpu/drm/omapdrm/omap_drv.h
+@@ -155,6 +155,7 @@ void omap_crtc_pre_uninit(void);
+ struct drm_crtc *omap_crtc_init(struct drm_device *dev,
+		struct drm_plane *plane, enum omap_channel channel, int id);
+ int omap_crtc_wait_pending(struct drm_crtc *crtc);
++bool omap_crtc_is_manual_updated(struct drm_crtc *crtc);
+
+ struct drm_plane *omap_plane_init(struct drm_device *dev,
+		int id, enum drm_plane_type type,
+@@ -171,6 +172,7 @@ struct drm_connector *omap_connector_init(struct drm_device *dev,
+ struct drm_encoder *omap_connector_attached_encoder(
+		struct drm_connector *connector);
+ bool omap_connector_get_hdmi_mode(struct drm_connector *connector);
++bool omap_connector_get_manually_updated(struct drm_connector *connector);
+ void omap_connector_flush(struct drm_connector *connector,
+		int x, int y, int w, int h);
+
+--
+2.11.0

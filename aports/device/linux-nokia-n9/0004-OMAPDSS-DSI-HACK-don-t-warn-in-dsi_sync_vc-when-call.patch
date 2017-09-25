@@ -1,0 +1,30 @@
+From 67559a64df12632ea0ae79920e321e2086a25e38 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Filip=20Matijevi=C4=87?= <filip.matijevic.pz@gmail.com>
+Date: Sun, 22 Nov 2015 19:43:08 +0100
+Subject: [PATCH 04/53] OMAPDSS: DSI: HACK: don't warn in dsi_sync_vc when
+ called from IRQ
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Filip Matijević <filip.matijevic.pz@gmail.com>
+---
+ drivers/video/fbdev/omap2/omapfb/dss/dsi.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/video/fbdev/omap2/omapfb/dss/dsi.c b/drivers/video/fbdev/omap2/omapfb/dss/dsi.c
+index d2aa8baadf83..ea3d39367980 100644
+--- a/drivers/video/fbdev/omap2/omapfb/dss/dsi.c
++++ b/drivers/video/fbdev/omap2/omapfb/dss/dsi.c
+@@ -2385,7 +2385,8 @@ static int dsi_sync_vc(struct platform_device *dsidev, int channel)
+
+	WARN_ON(!dsi_bus_is_locked(dsidev));
+
+-	WARN_ON(in_interrupt());
++	/* FIXME: should panel updates from TE irq be moved to worqueue? why panel-dsi-cm doesn't do that then?
++	WARN_ON(in_interrupt());*/
+
+	if (!dsi_vc_is_enabled(dsidev, channel))
+		return 0;
+--
+2.11.0

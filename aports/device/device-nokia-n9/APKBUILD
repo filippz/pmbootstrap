@@ -1,0 +1,35 @@
+pkgname=device-nokia-n9
+pkgver=1
+pkgrel=14
+pkgdesc="Nokia N9"
+url="https://github.com/postmarketOS"
+arch="noarch"
+license="MIT"
+depends="linux-nokia-n9 linux-firmware"
+makedepends=""
+install=""
+subpackages=""
+source="
+	deviceinfo
+	initfs-hook.sh
+	kick_watchdogs.sh
+	$install
+"
+options="!check"
+
+build() {
+	return 0
+}
+
+package() {
+	install -D -m644 "$srcdir"/deviceinfo \
+		"$pkgdir"/etc/deviceinfo
+	install -D -m644 "$srcdir"/initfs-hook.sh \
+		"$pkgdir"/etc/postmarketos-mkinitfs/hooks/00-${pkgname}.sh
+        install -D "$srcdir"/kick_watchdogs.sh \
+		"$pkgdir"/bin/kick_watchdogs.sh
+}
+
+sha512sums="75ef18b57cec3186273c3386b44cb3e07bcd33fde222b7e870b3cba072301ecdf2e896330aceb65ec01008ac8dce7cce7fae91c5d362cf68ab7e8ee6a79eab2f  deviceinfo
+6bfe7b73b63988c2ff9a3e89f8b199fdb7a0b9c53442599d5c8e65aafce54e714a48dbe0b61ec6e9ce8116d636d09e2ce37a4cd1b46043e2eee3ba52486b06d5  initfs-hook.sh
+a23c186a2b47d8556876d7c9e1e5c6af28e747d31734ed81415390706f17bfade061eaf14741feafde5b085e93f452823f502885bdd6ad795cce931eb29f7320  kick_watchdogs.sh"

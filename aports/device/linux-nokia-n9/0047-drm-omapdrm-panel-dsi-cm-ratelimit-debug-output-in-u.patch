@@ -1,0 +1,46 @@
+From 1f6f5bd6140e0337dd5720ba795afc497b296b39 Mon Sep 17 00:00:00 2001
+From: Sebastian Reichel <sre@kernel.org>
+Date: Wed, 2 Mar 2016 18:34:00 +0100
+Subject: [PATCH 47/53] drm: omapdrm: panel-dsi-cm: ratelimit debug output in
+ update path
+
+Generating debug messages during display update results
+in lot's of messages, if the display shows the console.
+
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c b/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
+index 28463e8e862e..1d3e391d2000 100644
+--- a/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
++++ b/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
+@@ -931,7 +931,7 @@ static int dsicm_update(struct omap_dss_device *dssdev,
+	struct omap_dss_device *in = ddata->in;
+	int r;
+
+-	dev_dbg(&ddata->pdev->dev, "update %d, %d, %d x %d\n", x, y, w, h);
++	dev_dbg_ratelimited(&ddata->pdev->dev, "update %d, %d, %d x %d\n", x, y, w, h);
+
+	mutex_lock(&ddata->lock);
+	in->ops.dsi->bus_lock(in);
+@@ -978,14 +978,14 @@ static int dsicm_sync(struct omap_dss_device *dssdev)
+	struct panel_drv_data *ddata = to_panel_data(dssdev);
+	struct omap_dss_device *in = ddata->in;
+
+-	dev_dbg(&ddata->pdev->dev, "sync\n");
++	dev_dbg_ratelimited(&ddata->pdev->dev, "sync\n");
+
+	mutex_lock(&ddata->lock);
+	in->ops.dsi->bus_lock(in);
+	in->ops.dsi->bus_unlock(in);
+	mutex_unlock(&ddata->lock);
+
+-	dev_dbg(&ddata->pdev->dev, "sync done\n");
++	dev_dbg_ratelimited(&ddata->pdev->dev, "sync done\n");
+
+	return 0;
+ }
+--
+2.11.0

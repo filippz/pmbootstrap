@@ -1,0 +1,270 @@
+From dc2dc67a7552da90169cfec96f1712d36754bf53 Mon Sep 17 00:00:00 2001
+From: Sebastian Reichel <sre@kernel.org>
+Date: Wed, 2 Mar 2016 18:31:54 +0100
+Subject: [PATCH 49/53] drm: omapdrm: panel-dsi-cm: add rotation support
+
+DSI panels support native rotation/mirror. This adds
+support for this capability using the DSS provided
+callback hooks.
+
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c | 187 +++++++++++++++++++++++-
+ 1 file changed, 184 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c b/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
+index 13937a7bbf8f..f888a98120cf 100644
+--- a/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
++++ b/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
+@@ -90,6 +90,9 @@ struct panel_drv_data {
+	bool ulps_enabled;
+	unsigned ulps_timeout;
+	struct delayed_work ulps_work;
++
++	u8 rotation;
++	bool mirror;
+ };
+
+ #define to_panel_data(p) container_of(p, struct panel_drv_data, dssdev)
+@@ -596,6 +599,44 @@ static void dsicm_hw_reset(struct panel_drv_data *ddata)
+	usleep_range(5000, 10000);
+ }
+
++static int dsicm_set_addr_mode(struct panel_drv_data *ddata, u8 rotate,
++		bool mirror)
++{
++	u8 mode;
++	int err;
++
++	err = dsicm_dcs_read_1(ddata, MIPI_DCS_GET_ADDRESS_MODE, &mode);
++	if (err)
++		return err;
++
++	mode &= ~((1<<7) | (1<<6) | (1<<5));
++
++	switch(rotate) {
++	default:
++	case 0:
++		mode |= (0 << 7) | (0 << 6) | (0 << 5);
++		break;
++	case 1:
++		mode |= (0 << 7) | (1 << 6) | (1 << 5);
++		break;
++	case 2:
++		mode |= (1 << 7) | (1 << 6) | (0 << 5);
++		break;
++	case 3:
++		mode |= (1 << 7) | (0 << 6) | (1 << 5);
++		break;
++	}
++
++	if (mirror) {
++		if (mode & (1 << 6))
++			mode &= (1 << 6);
++		else
++			mode |= (1 << 6);
++	}
++
++	return dsicm_dcs_write_1(ddata, MIPI_DCS_SET_ADDRESS_MODE, mode);
++}
++
+ static int dsicm_power_on(struct panel_drv_data *ddata)
+ {
+	struct omap_dss_device *in = ddata->in;
+@@ -676,6 +717,10 @@ static int dsicm_power_on(struct panel_drv_data *ddata)
+	if (r)
+		goto err;
+
++	r = dsicm_set_addr_mode(ddata, ddata->rotation, ddata->mirror);
++	if (r)
++		goto err;
++
+	r = dsicm_dcs_write_0(ddata, MIPI_DCS_SET_DISPLAY_ON);
+	if (r)
+		goto err;
+@@ -1140,6 +1185,134 @@ static int dsicm_memory_read(struct omap_dss_device *dssdev,
+	return r;
+ }
+
++static u8 dsicm_get_rotate(struct omap_dss_device *dssdev)
++{
++	struct panel_drv_data *ddata = to_panel_data(dssdev);
++	int r;
++
++	mutex_lock(&ddata->lock);
++	r = ddata->rotation;
++	mutex_unlock(&ddata->lock);
++
++	return r;
++}
++
++
++static bool rotation_is_90_degree(struct panel_drv_data *ddata,
++				  u8 new_rotation)
++{
++	u8 old_rotation = ddata->rotation;
++
++	if((old_rotation == 0 || old_rotation == 2) &&
++	   (new_rotation == 1 || new_rotation == 3))
++		return true;
++	if((old_rotation == 1 || old_rotation == 3) &&
++	   (new_rotation == 0 || new_rotation == 2))
++               return true;
++
++	return false;
++}
++
++static void update_timings(struct panel_drv_data *ddata, u8 new_rotation)
++{
++	/* no change required */
++	if (!rotation_is_90_degree(ddata, new_rotation))
++		return;
++
++	/* update timings */
++	swap(ddata->vm.hactive, ddata->vm.vactive);
++	swap(ddata->vm.hfront_porch, ddata->vm.vfront_porch);
++	swap(ddata->vm.hback_porch, ddata->vm.vback_porch);
++	/* update offset */
++	swap(ddata->offset_x, ddata->offset_y);
++}
++
++static int dsicm_set_rotate(struct omap_dss_device *dssdev, u8 rotate)
++{
++	struct panel_drv_data *ddata = to_panel_data(dssdev);
++	struct omap_dss_device *in = ddata->in;
++	int err = 0;
++
++	dev_dbg(dssdev->dev, "rotate %d\n", rotate);
++
++	mutex_lock(&ddata->lock);
++	if (ddata->rotation == rotate)
++		goto err1;
++
++	/* changing runtime from horizontal to vertical mode breaks overlay */
++	if (rotation_is_90_degree(ddata, rotate)) {
++		err = -EINVAL;
++		goto err1;
++	}
++
++	in->ops.dsi->bus_lock(in);
++
++	if (ddata->enabled) {
++		err = dsicm_wake_up(ddata);
++		if (err)
++			goto err2;
++
++		err = dsicm_set_addr_mode(ddata, rotate, ddata->mirror);
++		if (err)
++			goto err2;
++
++		update_timings(ddata, rotate);
++	}
++
++	ddata->rotation = rotate;
++
++err2:
++	in->ops.dsi->bus_unlock(in);
++err1:
++	mutex_unlock(&ddata->lock);
++	return err;
++}
++
++static bool dsicm_get_mirror(struct omap_dss_device *dssdev)
++{
++	struct panel_drv_data *ddata = to_panel_data(dssdev);
++	bool r;
++
++	mutex_lock(&ddata->lock);
++	r = ddata->mirror;
++	mutex_unlock(&ddata->lock);
++
++	return r;
++}
++
++static int dsicm_set_mirror(struct omap_dss_device *dssdev, bool enable)
++{
++	struct panel_drv_data *ddata = to_panel_data(dssdev);
++	struct omap_dss_device *in = ddata->in;
++	int err = 0;
++
++	dev_dbg(dssdev->dev, "mirror %d\n", enable);
++
++	mutex_lock(&ddata->lock);
++	if (ddata->mirror == enable)
++		goto err1;
++
++	in->ops.dsi->bus_lock(in);
++
++	if (ddata->enabled) {
++		err = dsicm_wake_up(ddata);
++		if (err)
++			goto err2;
++
++		err = dsicm_set_addr_mode(ddata, ddata->rotation, enable);
++		if (err)
++			goto err2;
++	}
++
++	ddata->mirror = enable;
++
++err2:
++	in->ops.dsi->bus_unlock(in);
++err1:
++	mutex_unlock(&ddata->lock);
++	return err;
++}
++
+ static void dsicm_ulps_work(struct work_struct *work)
+ {
+	struct panel_drv_data *ddata = container_of(work, struct panel_drv_data,
+@@ -1171,7 +1344,7 @@ static void dsicm_get_timings(struct omap_dss_device *dssdev,
+ }
+
+ static int dsicm_check_timings(struct omap_dss_device *dssdev,
+-		struct omap_video_timings *timings)
++		struct videomode *vm)
+ {
+	struct panel_drv_data *ddata = to_panel_data(dssdev);
+	int ret = 0;
+@@ -1219,6 +1392,11 @@ static struct omap_dss_driver dsicm_ops = {
+
+	.get_timings	= dsicm_get_timings,
+	.check_timings	= dsicm_check_timings,
++
++	.get_rotate	= dsicm_get_rotate,
++	.set_rotate	= dsicm_set_rotate,
++	.get_mirror	= dsicm_get_mirror,
++	.set_mirror	= dsicm_set_mirror,
+ };
+
+ static int dsicm_probe_of(struct platform_device *pdev)
+@@ -1269,8 +1447,8 @@ static int dsicm_probe_of(struct platform_device *pdev)
+
+	ddata->use_dsi_backlight = of_property_read_bool(node, "has-dsi-backlight");
+
+-	of_property_read_u32(node, "resolution-x", (u32*) &ddata->vm.vactive);
+-	of_property_read_u32(node, "resolution-y", (u32*) &ddata->vm.hactive);
++	of_property_read_u32(node, "resolution-x", (u32*) &ddata->vm.hactive);
++	of_property_read_u32(node, "resolution-y", (u32*) &ddata->vm.vactive);
+	of_property_read_u32(node, "offset-x", &ddata->offset_x);
+	of_property_read_u32(node, "offset-y", &ddata->offset_y);
+
+@@ -1300,6 +1478,8 @@ static int dsicm_probe(struct platform_device *pdev)
+	if (!pdev->dev.of_node)
+		return -ENODEV;
+
++
++
+	r = dsicm_probe_of(pdev);
+	if (r)
+		return r;
+@@ -1310,6 +1490,7 @@ static int dsicm_probe(struct platform_device *pdev)
+	ddata->vm.pixelclock = 864 * 480 * 60;
+	ddata->offset_x = 0;
+	ddata->offset_y = 0;
++	ddata->rotation = 0;
+
+	dssdev = &ddata->dssdev;
+	dssdev->dev = dev;
+--
+2.11.0

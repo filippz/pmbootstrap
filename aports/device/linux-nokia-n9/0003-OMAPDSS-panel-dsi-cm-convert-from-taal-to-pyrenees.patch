@@ -1,0 +1,421 @@
+From 783e7dceab8f4c26bc9cb05274ab5b8173a90fd6 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Filip=20Matijevi=C4=87?= <filip.matijevic.pz@gmail.com>
+Date: Sun, 4 Oct 2015 16:50:29 +0200
+Subject: [PATCH 03/53] OMAPDSS: panel-dsi-cm: convert from taal to pyrenees
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+pyrenees is code name of panel used in Nokia N9 (RM-696).
+Depending on revision, it's manufactured by either SMD or LGD.
+
+Signed-off-by: Filip Matijević <filip.matijevic.pz@gmail.com>
+---
+ .../fbdev/omap2/omapfb/displays/panel-dsi-cm.c     | 214 +++++++++++++++++++--
+ 1 file changed, 198 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/video/fbdev/omap2/omapfb/displays/panel-dsi-cm.c b/drivers/video/fbdev/omap2/omapfb/displays/panel-dsi-cm.c
+index 8b810696a42b..d4f9e76f7dbf 100644
+--- a/drivers/video/fbdev/omap2/omapfb/displays/panel-dsi-cm.c
++++ b/drivers/video/fbdev/omap2/omapfb/displays/panel-dsi-cm.c
+@@ -24,6 +24,7 @@
+ #include <linux/workqueue.h>
+ #include <linux/of_device.h>
+ #include <linux/of_gpio.h>
++#include <linux/regulator/consumer.h>
+
+ #include <video/omapfb_dss.h>
+ #include <video/mipi_display.h>
+@@ -31,7 +32,13 @@
+ /* DSI Virtual channel. Hardcoded for now. */
+ #define TCH 0
+
++#define DCS_NOP			0x00
+ #define DCS_READ_NUM_ERRORS	0x05
++#define DCS_READ_MADCTL		0x0b
++#define DCS_PARTIAL_MODE_ON	0x12
++#define DCS_PARTIAL_AREA	0x30
++#define DCS_MEM_ACC_CTRL	0x36
++#define DCS_WRITE_TEAR_SCANLINE	0x44
+ #define DCS_BRIGHTNESS		0x51
+ #define DCS_CTRL_DISPLAY	0x53
+ #define DCS_GET_ID1		0xda
+@@ -67,6 +74,7 @@ struct panel_drv_data {
+	bool enabled;
+
+	bool te_enabled;
++	atomic_t te_irq_count;
+
+	atomic_t do_update;
+	int channel;
+@@ -78,10 +86,14 @@ struct panel_drv_data {
+	bool ulps_enabled;
+	unsigned ulps_timeout;
+	struct delayed_work ulps_work;
++
++	struct regulator *vpnl;
++	struct regulator *vddi;
+ };
+
+ #define to_panel_data(p) container_of(p, struct panel_drv_data, dssdev)
+
++
+ static irqreturn_t dsicm_te_isr(int irq, void *data);
+ static void dsicm_te_timeout_work_callback(struct work_struct *work);
+ static int _dsicm_enable_te(struct panel_drv_data *ddata, bool enable);
+@@ -136,6 +148,14 @@ static int dsicm_dcs_write_1(struct panel_drv_data *ddata, u8 dcs_cmd, u8 param)
+	return in->ops.dsi->dcs_write(in, ddata->channel, buf, 2);
+ }
+
++static int dsicm_dcs_write_2(struct panel_drv_data *ddata, u8 dcs_cmd, u8 param1, u8 param2)
++{
++	struct omap_dss_device *in = ddata->in;
++	u8 buf[3] = { dcs_cmd, param1, param2 };
++
++	return in->ops.dsi->dcs_write(in, ddata->channel, buf, 3);
++}
++
+ static int dsicm_sleep_in(struct panel_drv_data *ddata)
+
+ {
+@@ -276,6 +296,7 @@ static int dsicm_enter_ulps(struct panel_drv_data *ddata)
+ static int dsicm_exit_ulps(struct panel_drv_data *ddata)
+ {
+	struct omap_dss_device *in = ddata->in;
++	int te_irq_count;
+	int r;
+
+	if (!ddata->ulps_enabled)
+@@ -295,9 +316,19 @@ static int dsicm_exit_ulps(struct panel_drv_data *ddata)
+		goto err2;
+	}
+
++	te_irq_count = atomic_read(&ddata->te_irq_count);
++
+	if (gpio_is_valid(ddata->ext_te_gpio))
+		enable_irq(gpio_to_irq(ddata->ext_te_gpio));
+
++	/*
++	 * HACK: Ignore any TE irqs that occur upon enable irq, as they are
++	 * bound to be incorrectly timed. The irq handler will skip the first
++	 * two irqs, but if enable irq does *not* cause an irq, increment the
++	 * irq count, in order to ignore as few irqs as possible.
++	 */
++	atomic_cmpxchg(&ddata->te_irq_count, te_irq_count, te_irq_count + 1);
++
+	dsicm_queue_ulps_work(ddata);
+
+	ddata->ulps_enabled = false;
+@@ -380,8 +411,8 @@ static const struct backlight_ops dsicm_bl_ops = {
+ static void dsicm_get_resolution(struct omap_dss_device *dssdev,
+		u16 *xres, u16 *yres)
+ {
+-	*xres = dssdev->panel.timings.x_res;
+-	*yres = dssdev->panel.timings.y_res;
++	*xres = 854;
++	*yres = 480;
+ }
+
+ static ssize_t dsicm_num_errors_show(struct device *dev,
+@@ -579,19 +610,87 @@ static void dsicm_hw_reset(struct panel_drv_data *ddata)
+	usleep_range(5000, 10000);
+ }
+
++static int dsicm_set_rotate(struct panel_drv_data *ddata, u8 rotate, u8 id1, u8 id2, u8 id3)
++{
++	u8 mode;
++	int r;
++	int b5, b6, b7;
++
++	r = dsicm_dcs_read_1(ddata, DCS_READ_MADCTL, &mode);
++	if (r)
++		return r;
++
++	switch (rotate) {
++	default:
++	case 0:
++		b7 = 0;
++		b6 = 0;
++		b5 = 0;
++		break;
++	case 1:
++		b7 = 0;
++		b6 = 1;
++		b5 = 1;
++		break;
++	case 2:
++		b7 = 1;
++		b6 = 1;
++		b5 = 0;
++		break;
++	case 3:
++		b7 = 1;
++		b6 = 0;
++		b5 = 1;
++		break;
++	}
++
++	mode &= ~((1<<7) | (1<<6) | (1<<5));
++	mode |= (b7 << 7) | (b6 << 6) | (b5 << 5);
++
++	return dsicm_dcs_write_1(ddata, DCS_MEM_ACC_CTRL, mode);
++}
++
++/* set visible area to to 480 x 854 lines */
++static int dsicm_set_partial_area(struct panel_drv_data *ddata)
++{
++	struct omap_dss_device *in = ddata->in;
++	int r;
++	u16 start_row = 0;
++	u16 end_row = start_row + 854 - 1;
++
++	u8 partial_area[] = {
++		DCS_PARTIAL_AREA,
++		(start_row >> 8) & 0xff, start_row & 0xff,
++		(end_row >> 8) & 0xff, end_row & 0xff,
++	};
++
++	r = in->ops.dsi->dcs_write(in, TCH, partial_area, sizeof(partial_area));
++	if (r)
++		return r;
++
++	return dsicm_dcs_write_0(ddata, DCS_PARTIAL_MODE_ON);
++}
++
+ static int dsicm_power_on(struct panel_drv_data *ddata)
+ {
+	struct omap_dss_device *in = ddata->in;
+	u8 id1, id2, id3;
++	u16 scanline = 0;
+	int r;
+	struct omap_dss_dsi_config dsi_config = {
+		.mode = OMAP_DSS_DSI_CMD_MODE,
+		.pixel_format = OMAP_DSS_DSI_FMT_RGB888,
+		.timings = &ddata->timings,
+-		.hs_clk_min = 150000000,
+-		.hs_clk_max = 300000000,
+-		.lp_clk_min = 7000000,
+-		.lp_clk_max = 10000000,
++		.hs_clk_min = 210240000,
++		.hs_clk_max = 210240000,
++		/*
++		 * Harmattan kernel board files suggest LP clock of 8.76 MHz,
++		 * but DSI in 3.5.3 kernel reports LP clock of 10.8 MHz.
++		 * Closest we can get currently is 10.512 Mhz, so that is
++		 * set as the lp_clk_min.
++		 */
++		.lp_clk_min = 10512000,
++		.lp_clk_max = 10800000,
+	};
+
+	if (ddata->pin_config.num_pins > 0) {
+@@ -641,6 +740,20 @@ static int dsicm_power_on(struct panel_drv_data *ddata)
+	if (r)
+		goto err;
+
++	/*
++	 * HACK
++	 * we get framedone note received if we use 480 x 864
++	 * in timings.x_res/timings.y_res
++	 * swap x,y size and rotate by 90°
++	 */
++	r = dsicm_set_rotate(ddata, 1, id1, id2, id3);
++	if (r)
++		goto err;
++
++	r = dsicm_set_partial_area(ddata);
++	if (r)
++		goto err;
++
+	r = dsicm_dcs_write_0(ddata, MIPI_DCS_SET_DISPLAY_ON);
+	if (r)
+		goto err;
+@@ -663,6 +776,25 @@ static int dsicm_power_on(struct panel_drv_data *ddata)
+
+	in->ops.dsi->enable_hs(in, ddata->channel, true);
+
++	/* First command in HS after power on sometimes fails on SMD Pyrenees */
++	if (id1 == 0xfe) {
++		r = dsicm_dcs_write_0(ddata, DCS_NOP);
++		if (r)
++			dev_warn(&ddata->pdev->dev, "power on workaround\n");
++
++		/*
++		 * SMD Pyrenees drops framerate in ACL, and produces one or two
++		 * irregularly timed TE signals after DCS_TEAR_ON. Both of these
++		 * problems can be worked around by reversing the TE irq
++		 */
++		scanline = ddata->timings.y_res;
++	}
++
++	r = dsicm_dcs_write_2(ddata, DCS_WRITE_TEAR_SCANLINE,
++			scanline >> 8, scanline & 0xff);
++	if (r)
++		goto err;
++
+	return 0;
+ err:
+	dev_err(&ddata->pdev->dev, "error while enabling panel, issuing HW reset\n");
+@@ -774,6 +906,18 @@ static int dsicm_enable(struct omap_dss_device *dssdev)
+		goto err;
+	}
+
++	if (ddata->vpnl) {
++		r = regulator_enable(ddata->vpnl);
++		if (r != 0)
++			goto err;
++	}
++
++	if (ddata->vddi) {
++		r = regulator_enable(ddata->vddi);
++		if (r != 0)
++			goto err1;
++	}
++
+	in->ops.dsi->bus_lock(in);
+
+	r = dsicm_power_on(ddata);
+@@ -781,13 +925,19 @@ static int dsicm_enable(struct omap_dss_device *dssdev)
+	in->ops.dsi->bus_unlock(in);
+
+	if (r)
+-		goto err;
++		goto err2;
+
+	dssdev->state = OMAP_DSS_DISPLAY_ACTIVE;
+
+	mutex_unlock(&ddata->lock);
+
+	return 0;
++err2:
++	if (ddata->vddi)
++		regulator_disable(ddata->vddi);
++err1:
++	if (ddata->vpnl)
++		regulator_disable(ddata->vpnl);
+ err:
+	dev_dbg(&ddata->pdev->dev, "enable failed\n");
+	mutex_unlock(&ddata->lock);
+@@ -816,6 +966,12 @@ static void dsicm_disable(struct omap_dss_device *dssdev)
+
+	in->ops.dsi->bus_unlock(in);
+
++	if (ddata->vpnl)
++		regulator_disable(ddata->vpnl);
++
++	if (ddata->vddi)
++		regulator_disable(ddata->vddi);
++
+	dssdev->state = OMAP_DSS_DISPLAY_DISABLED;
+
+	mutex_unlock(&ddata->lock);
+@@ -837,6 +993,10 @@ static irqreturn_t dsicm_te_isr(int irq, void *data)
+	int old;
+	int r;
+
++	/* HACK: Skip the first two irqs after enabling TE. */
++	if (atomic_inc_return(&ddata->te_irq_count) < 3)
++		return IRQ_HANDLED;
++
+	old = atomic_cmpxchg(&ddata->do_update, 1, 0);
+
+	if (old) {
+@@ -937,17 +1097,16 @@ static int _dsicm_enable_te(struct panel_drv_data *ddata, bool enable)
+	struct omap_dss_device *in = ddata->in;
+	int r;
+
+-	if (enable)
++	if (enable) {
++		atomic_set(&ddata->te_irq_count, 0);
+		r = dsicm_dcs_write_1(ddata, MIPI_DCS_SET_TEAR_ON, 0);
+-	else
++	} else {
+		r = dsicm_dcs_write_0(ddata, MIPI_DCS_SET_TEAR_OFF);
++	}
+
+	if (!gpio_is_valid(ddata->ext_te_gpio))
+		in->ops.dsi->enable_te(in, enable);
+
+-	/* possible panel bug */
+-	msleep(100);
+-
+	return r;
+ }
+
+@@ -1130,6 +1289,21 @@ static int dsicm_probe_of(struct platform_device *pdev)
+	struct panel_drv_data *ddata = platform_get_drvdata(pdev);
+	struct omap_dss_device *in;
+	int gpio;
++	struct regulator *reg;
++
++	reg = devm_regulator_get(&pdev->dev, "vpnl");
++	if (IS_ERR(reg)) {
++		dev_err(&pdev->dev, "failed to get vpnl regulator\n");
++		return PTR_ERR(reg);
++	}
++	ddata->vpnl = reg;
++
++	reg = devm_regulator_get(&pdev->dev, "vddi");
++	if (IS_ERR(reg)) {
++		dev_err(&pdev->dev, "failed to get vddi regulator\n");
++		return PTR_ERR(reg);
++	}
++	ddata->vddi = reg;
+
+	gpio = of_get_named_gpio(node, "reset-gpios", 0);
+	if (!gpio_is_valid(gpio)) {
+@@ -1154,6 +1328,9 @@ static int dsicm_probe_of(struct platform_device *pdev)
+
+	ddata->in = in;
+
++	if (of_property_read_bool(node, "use_dsi_backlight"))
++		ddata->use_dsi_backlight = true;
++
+	/* TODO: ulps, backlight */
+
+	return 0;
+@@ -1184,9 +1361,14 @@ static int dsicm_probe(struct platform_device *pdev)
+	if (r)
+		return r;
+
++	/*
++	 * HACK
++	 * we get framedone note received if we use 480 x 864
++	 * in timings.x_res/timings.y_res
++	 * swap x,y size and rotate by 90°
++	 */
+	ddata->timings.x_res = 864;
+	ddata->timings.y_res = 480;
+-	ddata->timings.pixelclock = 864 * 480 * 60;
+
+	dssdev = &ddata->dssdev;
+	dssdev->dev = dev;
+@@ -1211,7 +1393,7 @@ static int dsicm_probe(struct platform_device *pdev)
+
+	if (gpio_is_valid(ddata->reset_gpio)) {
+		r = devm_gpio_request_one(dev, ddata->reset_gpio,
+-				GPIOF_OUT_INIT_LOW, "taal rst");
++				GPIOF_OUT_INIT_LOW, "pyrenees rst");
+		if (r) {
+			dev_err(dev, "failed to request reset gpio\n");
+			return r;
+@@ -1220,7 +1402,7 @@ static int dsicm_probe(struct platform_device *pdev)
+
+	if (gpio_is_valid(ddata->ext_te_gpio)) {
+		r = devm_gpio_request_one(dev, ddata->ext_te_gpio,
+-				GPIOF_IN, "taal irq");
++				GPIOF_IN, "pyrenees irq");
+		if (r) {
+			dev_err(dev, "GPIO request failed\n");
+			return r;
+@@ -1229,7 +1411,7 @@ static int dsicm_probe(struct platform_device *pdev)
+		r = devm_request_irq(dev, gpio_to_irq(ddata->ext_te_gpio),
+				dsicm_te_isr,
+				IRQF_TRIGGER_RISING,
+-				"taal vsync", ddata);
++				"pyrenees vsync", ddata);
+
+		if (r) {
+			dev_err(dev, "IRQ request failed\n");
+--
+2.11.0

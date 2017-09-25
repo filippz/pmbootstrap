@@ -1,0 +1,172 @@
+From 71dae6f042cafb804002489a61cc827b4ae454ac Mon Sep 17 00:00:00 2001
+From: filippz <filip.matijevic.pz@gmail.com>
+Date: Thu, 18 Feb 2016 07:33:29 +0100
+Subject: [PATCH 25/53] Revert "fat: add fat_fallocate operation"
+
+This reverts commit b13bb33eacb7266d66a3adf03adaa0886d091789.
+---
+ fs/fat/fat.h   |  1 -
+ fs/fat/file.c  | 61 ----------------------------------------------------------
+ fs/fat/inode.c | 34 ++------------------------------
+ 3 files changed, 2 insertions(+), 94 deletions(-)
+
+diff --git a/fs/fat/fat.h b/fs/fat/fat.h
+index e402b63c886c..5908b5a0a807 100644
+--- a/fs/fat/fat.h
++++ b/fs/fat/fat.h
+@@ -384,7 +384,6 @@ static inline unsigned long fat_dir_hash(int logstart)
+ {
+	return hash_32(logstart, FAT_HASH_BITS);
+ }
+-extern int fat_add_cluster(struct inode *inode);
+
+ /* fat/misc.c */
+ extern __printf(3, 4) __cold
+diff --git a/fs/fat/file.c b/fs/fat/file.c
+index 3d04b124bce0..27dd0573ebc1 100644
+--- a/fs/fat/file.c
++++ b/fs/fat/file.c
+@@ -14,12 +14,8 @@
+ #include <linux/backing-dev.h>
+ #include <linux/fsnotify.h>
+ #include <linux/security.h>
+-#include <linux/falloc.h>
+ #include "fat.h"
+
+-static long fat_fallocate(struct file *file, int mode,
+-			  loff_t offset, loff_t len);
+-
+ static int fat_ioctl_get_attributes(struct inode *inode, u32 __user *user_attr)
+ {
+	u32 attr;
+@@ -181,7 +177,6 @@ const struct file_operations fat_file_operations = {
+ #endif
+	.fsync		= fat_file_fsync,
+	.splice_read	= generic_file_splice_read,
+-	.fallocate	= fat_fallocate,
+ };
+
+ static int fat_cont_expand(struct inode *inode, loff_t size)
+@@ -220,62 +215,6 @@ static int fat_cont_expand(struct inode *inode, loff_t size)
+	return err;
+ }
+
+-/*
+- * Preallocate space for a file. This implements fat's fallocate file
+- * operation, which gets called from sys_fallocate system call. User
+- * space requests len bytes at offset. If FALLOC_FL_KEEP_SIZE is set
+- * we just allocate clusters without zeroing them out. Otherwise we
+- * allocate and zero out clusters via an expanding truncate.
+- */
+-static long fat_fallocate(struct file *file, int mode,
+-			  loff_t offset, loff_t len)
+-{
+-	int nr_cluster; /* Number of clusters to be allocated */
+-	loff_t mm_bytes; /* Number of bytes to be allocated for file */
+-	loff_t ondisksize; /* block aligned on-disk size in bytes*/
+-	struct inode *inode = file->f_mapping->host;
+-	struct super_block *sb = inode->i_sb;
+-	struct msdos_sb_info *sbi = MSDOS_SB(sb);
+-	int err = 0;
+-
+-	/* No support for hole punch or other fallocate flags. */
+-	if (mode & ~FALLOC_FL_KEEP_SIZE)
+-		return -EOPNOTSUPP;
+-
+-	/* No support for dir */
+-	if (!S_ISREG(inode->i_mode))
+-		return -EOPNOTSUPP;
+-
+-	inode_lock(inode);
+-	if (mode & FALLOC_FL_KEEP_SIZE) {
+-		ondisksize = inode->i_blocks << 9;
+-		if ((offset + len) <= ondisksize)
+-			goto error;
+-
+-		/* First compute the number of clusters to be allocated */
+-		mm_bytes = offset + len - ondisksize;
+-		nr_cluster = (mm_bytes + (sbi->cluster_size - 1)) >>
+-			sbi->cluster_bits;
+-
+-		/* Start the allocation.We are not zeroing out the clusters */
+-		while (nr_cluster-- > 0) {
+-			err = fat_add_cluster(inode);
+-			if (err)
+-				goto error;
+-		}
+-	} else {
+-		if ((offset + len) <= i_size_read(inode))
+-			goto error;
+-
+-		/* This is just an expanding truncate */
+-		err = fat_cont_expand(inode, (offset + len));
+-	}
+-
+-error:
+-	inode_unlock(inode);
+-	return err;
+-}
+-
+ /* Free all clusters after the skip'th cluster. */
+ static int fat_free(struct inode *inode, int skip)
+ {
+diff --git a/fs/fat/inode.c b/fs/fat/inode.c
+index e4b43da3e5cb..e3be45f57d62 100644
+--- a/fs/fat/inode.c
++++ b/fs/fat/inode.c
+@@ -93,7 +93,7 @@ static struct fat_floppy_defaults {
+ },
+ };
+
+-int fat_add_cluster(struct inode *inode)
++static int fat_add_cluster(struct inode *inode)
+ {
+	int err, cluster;
+
+@@ -575,43 +575,13 @@ struct inode *fat_build_inode(struct super_block *sb,
+
+ EXPORT_SYMBOL_GPL(fat_build_inode);
+
+-static int __fat_write_inode(struct inode *inode, int wait);
+-
+-static void fat_free_eofblocks(struct inode *inode)
+-{
+-	/* Release unwritten fallocated blocks on inode eviction. */
+-	if ((inode->i_blocks << 9) >
+-			round_up(MSDOS_I(inode)->mmu_private,
+-				MSDOS_SB(inode->i_sb)->cluster_size)) {
+-		int err;
+-
+-		fat_truncate_blocks(inode, MSDOS_I(inode)->mmu_private);
+-		/* Fallocate results in updating the i_start/iogstart
+-		 * for the zero byte file. So, make it return to
+-		 * original state during evict and commit it to avoid
+-		 * any corruption on the next access to the cluster
+-		 * chain for the file.
+-		 */
+-		err = __fat_write_inode(inode, inode_needs_sync(inode));
+-		if (err) {
+-			fat_msg(inode->i_sb, KERN_WARNING, "Failed to "
+-					"update on disk inode for unused "
+-					"fallocated blocks, inode could be "
+-					"corrupted. Please run fsck");
+-		}
+-
+-	}
+-}
+-
+ static void fat_evict_inode(struct inode *inode)
+ {
+	truncate_inode_pages_final(&inode->i_data);
+	if (!inode->i_nlink) {
+		inode->i_size = 0;
+		fat_truncate_blocks(inode, 0);
+-	} else
+-		fat_free_eofblocks(inode);
+-
++	}
+	invalidate_inode_buffers(inode);
+	clear_inode(inode);
+	fat_cache_inval_inode(inode);
+--
+2.11.0

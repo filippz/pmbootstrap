@@ -1,0 +1,125 @@
+From 1286e051593617e8a3351570693e0487db5c4ee1 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Filip=20Matijevi=C4=87?= <filip.matijevic.pz@gmail.com>
+Date: Fri, 1 Jul 2016 18:49:56 +0200
+Subject: [PATCH 05/53] ARM: dts: N9/N950: Add OMAPDSS support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Filip Matijević <filip.matijevic.pz@gmail.com>
+---
+ arch/arm/boot/dts/omap3-n9.dts       |  4 +++
+ arch/arm/boot/dts/omap3-n950-n9.dtsi | 62 ++++++++++++++++++++++++++++++++++++
+ arch/arm/boot/dts/omap3-n950.dts     |  4 +++
+ 3 files changed, 70 insertions(+)
+
+diff --git a/arch/arm/boot/dts/omap3-n9.dts b/arch/arm/boot/dts/omap3-n9.dts
+index b9e58c536afd..a5c1b2ceb184 100644
+--- a/arch/arm/boot/dts/omap3-n9.dts
++++ b/arch/arm/boot/dts/omap3-n9.dts
+@@ -71,3 +71,7 @@
+	st,max-limit-y = <46>;
+	st,max-limit-z = <46>;
+ };
++
++&lcd0 {
++	compatible = "smd,pyrenees", "panel-dsi-cm";
++};
+diff --git a/arch/arm/boot/dts/omap3-n950-n9.dtsi b/arch/arm/boot/dts/omap3-n950-n9.dtsi
+index 5d8c4b4a4205..467ec3d1025a 100644
+--- a/arch/arm/boot/dts/omap3-n950-n9.dtsi
++++ b/arch/arm/boot/dts/omap3-n950-n9.dtsi
+@@ -11,6 +11,10 @@
+ #include "omap36xx.dtsi"
+
+ / {
++	aliases {
++		display = &lcd0;
++	};
++
+	cpus {
+		cpu@0 {
+			cpu0-supply = <&vcc>;
+@@ -125,6 +129,24 @@
+			OMAP3_CORE1_IOPAD(0x210a, PIN_OUTPUT | MUX_MODE4)            /* gpio_93 (cmt_apeslpx) */
+		>;
+	};
++
++	lcd0_pins: pinmux_lcd0_pins {
++		pinctrl-single,pins = <
++			OMAP3_CORE1_IOPAD(0x20ca, PIN_INPUT  | MUX_MODE4)	/* gpmc_nwp.gpio_62 -> DSI TE irq */
++			OMAP3_CORE1_IOPAD(0x20fe, PIN_OUTPUT | MUX_MODE4)	/* dss_data17.gpio_87 -> DSI RESX */
++		>;
++	};
++
++	dsi_pins: pinumx_dsi_pins {
++		pinctrl-single,pins = <
++			OMAP3_CORE1_IOPAD(0x20dc, MUX_MODE1) /* dss_data0.dsi_dx0 */
++			OMAP3_CORE1_IOPAD(0x20de, MUX_MODE1) /* dss_data1.dsi_dy0 */
++			OMAP3_CORE1_IOPAD(0x20e0, MUX_MODE1) /* dss_data2.dsi_dx1 */
++			OMAP3_CORE1_IOPAD(0x20e2, MUX_MODE1) /* dss_data3.dsi_dy1 */
++			OMAP3_CORE1_IOPAD(0x20e4, MUX_MODE1) /* dss_data4.dsi_dx2 */
++			OMAP3_CORE1_IOPAD(0x20e6, MUX_MODE1) /* dss_data5.dsi_dy2 */
++		>;
++	};
+ };
+
+ &omap3_pmx_core2 {
+@@ -435,3 +457,43 @@
+ &ssi_port2 {
+	status = "disabled";
+ };
++
++&dss {
++	status = "ok";
++};
++
++&dsi {
++	status = "ok";
++	vdd-supply = <&vpll2>;
++
++	pinctrl-names = "default";
++	pinctrl-0 = <&dsi_pins>;
++
++	port {
++		dsi_out_ep: endpoint {
++			remote-endpoint = <&lcd0_in>;
++			lanes = <2 3 4 5 0 1>;
++		};
++	};
++
++	lcd0: display {
++		label = "lcd0";
++
++		vpnl-supply = <&vmmc2>;
++		vddi-supply = <&vio>;
++
++		pinctrl-names = "default";
++		pinctrl-0 = <&lcd0_pins>;
++
++		use_dsi_backlight;
++
++		reset-gpios = <&gpio3 23 GPIO_ACTIVE_HIGH>; /* gpio_87 */
++		te-gpios = <&gpio2 30 GPIO_ACTIVE_HIGH>; /* gpio_62 */
++
++		port {
++			lcd0_in: endpoint {
++				remote-endpoint = <&dsi_out_ep>;
++			};
++		};
++	};
++};
+diff --git a/arch/arm/boot/dts/omap3-n950.dts b/arch/arm/boot/dts/omap3-n950.dts
+index 646601a3ebd8..0dc6aa778040 100644
+--- a/arch/arm/boot/dts/omap3-n950.dts
++++ b/arch/arm/boot/dts/omap3-n950.dts
+@@ -185,3 +185,7 @@
+	st,max-limit-y = <32>;
+	st,max-limit-z = <32>;
+ };
++
++&lcd0 {
++	compatible = "auo,himalaya", "panel-dsi-cm";
++};
+--
+2.11.0

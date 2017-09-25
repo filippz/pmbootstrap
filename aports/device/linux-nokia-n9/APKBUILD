@@ -1,0 +1,214 @@
+# APKBUILD based on linux-vanilla aport. Changes:
+# - disabled module installation
+# - add !check !tracedeps
+# - package: just install zimage and kernel.release, because the kernel config
+#	does not generate modules or dtb files
+# - do not create -dev subpackage (makes no sense without module support)
+#
+# Kernel config based on: arch/arm/configs/lineageos_mako_defconfig
+# Changes:
+# - enable devtmpfs (needed for udev -> touch support in weston)
+
+_vendor=nokia
+_flavor=nokia-n9
+_config="config-${_flavor}.armhf"
+
+pkgname=linux-${_flavor}
+pkgver=4.10
+case $pkgver in
+	*.*.*)  _kernver=${pkgver%.*};;
+	*.*) _kernver=$pkgver;;
+esac
+pkgrel=0
+arch="armhf"
+pkgdesc="Nokia N9 kernel"
+url="https://github.com/torvalds/linux/"
+depends="postmarketos-mkinitfs"
+makedepends="perl sed installkernel bash gmp-dev bc linux-headers elfutils-dev"
+options="!strip !check !tracedeps"
+install=
+source="
+	$pkgname-$pkgver.tar.gz::https://github.com/torvalds/linux/archive/v$pkgver.tar.gz
+	0001-PM-HACK-fix-watchdog-timer-in-suspend.patch
+	0002-OMAPDSS-dsi-reset-DSI-on-init.patch
+	0003-OMAPDSS-panel-dsi-cm-convert-from-taal-to-pyrenees.patch
+	0004-OMAPDSS-DSI-HACK-don-t-warn-in-dsi_sync_vc-when-call.patch
+	0005-ARM-dts-N9-N950-Add-OMAPDSS-support.patch
+	0006-ARM-N9-N950-Add-PVR-drivers.patch
+	0007-ARM-dts-N9-Add-keyboard-support.patch
+	0008-ARM-dts-N9-N950-Add-touchscreen-support.patch
+	0009-ARM-dts-N9-Add-wireless-support.patch
+	0010-leds-lp5521-Add-r-to-batt-dt-property.patch
+	0011-ARM-dts-N9-Add-lp5521-support.patch
+	0012-power_supply-Add-support-for-TWL5031-BCC.patch
+	0013-ARM-dts-N9-N950-Add-support-for-TWL5031-BCC.patch
+	0014-input-Add-SPI-vibra-support.patch
+	0015-ARM-dts-N9-Add-vibra-support.patch
+	0016-ARM-dts-N9-Add-support-for-AK8975-magnetometer.patch
+	0017-ASoC-tlv320dac33-Add-device-tree-support.patch
+	0018-mfd-wl1273-Add-device-tree-support.patch
+	0019-media-radio-wl1273-Fix-V4L2_CID_TUNE_PREEMPHASIS-con.patch
+	0020-ASoC-n9-Add-support-for-Nokia-N9-N950.patch
+	0021-input-mfd-Add-support-for-TWL5031-ACI-Nokia-ECI.patch
+	0022-ARM-dts-N9-N950-Add-ACI-ECI-support.patch
+	0023-Revert-fat-permit-to-return-phy-block-number-by-fibm.patch
+	0024-Revert-fat-skip-cluster-allocation-on-fallocated-reg.patch
+	0025-Revert-fat-add-fat_fallocate-operation.patch
+	0026-misc-apds990x-Add-device-tree-support.patch
+	0027-misc-apds990x-convert-to-iio.patch
+	0028-iio-apds990x-move-from-misc-to-iio-light.patch
+	0029-ARM-dts-N9-Add-support-for-apds990x-ALS-PS.patch
+	0030-Revert-drm-omapdrm-Remove-manual-update-display-supp.patch
+	0031-drm-omapdrm-wait-for-pending-operations-before-updat.patch
+	0032-drm-omapdrm-crtc-switch-pending-variable-to-atomic-b.patch
+	0033-drm-omapdrm-crtc-add-enabled-bit-to-state.patch
+	0034-drm-omapdrm-dss-method-to-get-stallmode-from-lcd-con.patch
+	0035-drm-omapdrm-crtc-detect-manually-updated-displays.patch
+	0036-include-video-omapdss-provide-fifo-threshold-methods.patch
+	0037-drm-omapdrm-plane-update-fifo-size-on-atomic-update.patch
+	0038-drm-omapdrm-crtc-update-plane-fifos-on-lcd-config-ch.patch
+	0039-drm-omapdrm-crtc-save-framedone-callback-from-dss.patch
+	0040-drm-omapdrm-crtc-add-support-for-manual-updated-disp.patch
+	0041-drm-omapdrm-update-manual-displays-on-dirty-ioctl.patch
+	0042-drm-omapdrm-panel-dsi-cm-add-regulator-support.patch
+	0043-drm-omapdrm-panel-dsi-cm-use-threaded-irq-handler.patch
+	0044-drm-omapdrm-panel-dsi-cm-improve-DT-support.patch
+	0045-drm-omapdrm-panel-dsi-cm-add-offset-support.patch
+	0046-drm-omapdrm-panel-dsi-cm-block-disable-until-update-.patch
+	0047-drm-omapdrm-panel-dsi-cm-ratelimit-debug-output-in-u.patch
+	0048-drm-omapdrm-panel-dsi-cm-provide-timings-methods-for.patch
+	0049-drm-omapdrm-panel-dsi-cm-add-rotation-support.patch
+	0050-ARM-N9-N950-add-additional-DT-data-for-panel-dsi-cm.patch
+	0051-drm-omapdrm-panel-dsi-cm-add-DT-rotation-support.patch
+	0052-ARM-N9-set-DT-data-for-panel-dsi-cm.patch
+	0053-ARM-N9-Add-n9_defconfig.patch
+	$_config
+	compiler-gcc6.h
+"
+subpackages=""
+license="GPL2"
+
+_abi_release=${pkgver}
+_carch="arm"
+HOSTCC="${CC:-gcc}"
+HOSTCC="${HOSTCC#${CROSS_COMPILE}}"
+
+ksrcdir="$srcdir/linux-$pkgver"
+
+prepare() {
+	local _patch_failed=
+	cd "$ksrcdir"
+
+	# first apply patches in specified order
+	for i in $source; do
+		case $i in
+		*.patch)
+			msg "Applying $i..."
+			if ! patch -s -p1 -N -i "$srcdir"/$i; then
+				echo $i >>failed
+				_patch_failed=1
+			fi
+			;;
+		esac
+	done
+
+	if ! [ -z "$_patch_failed" ]; then
+		error "The following patches failed:"
+		cat failed
+		return 1
+	fi
+
+	# gcc6 support
+	cp -v "$srcdir/compiler-gcc6.h" "$ksrcdir/include/linux/"
+
+	mkdir -p "$srcdir"/build
+	cp "$srcdir"/$_config "$srcdir"/build/.config || return 1
+	make -C "$ksrcdir" O="$srcdir"/build ARCH="$_carch" HOSTCC="$HOSTCC" \
+		olddefconfig
+}
+
+
+
+# this is so we can do: 'abuild menuconfig' to reconfigure kernel
+menuconfig() {
+	cd "$srcdir"/build || return 1
+	make ARCH="$_carch" menuconfig
+	cp .config "$startdir"/$_config
+}
+
+build() {
+	cd "$srcdir"/build
+	unset LDFLAGS
+	make ARCH="$_carch" CC="${CC:-gcc}" \
+		KBUILD_BUILD_VERSION="$((pkgrel + 1 ))-Alpine" \
+		|| return 1
+}
+
+package() {
+	cd "$srcdir/build/arch/arm/boot"
+
+	cat zImage dts/omap3-n9.dtb > zImage-dtb
+
+	install -Dm644 "$srcdir/build/arch/arm/boot/zImage-dtb" \
+		"$pkgdir/boot/vmlinuz-$_flavor"
+
+	install -D "$srcdir/build/include/config/kernel.release" \
+		"$pkgdir/usr/share/kernel/$_flavor/kernel.release"
+}
+
+sha512sums="ddff51f83b7a40b235f129352a73ca36b486a3bf91904529776bbb72a1e310f23b1f81737b886c1aeb35eef56f017af18f6032478681ba21757025b6f8679391  linux-nokia-n9-4.10.tar.gz
+10e298973c7df2f8b6675cc5cd34782c009786b9e16154de0525bae5037639d80dfd61feb5afae149eee8892536707c580d96d467b011ad94ee5ce80afc25ecf  0001-PM-HACK-fix-watchdog-timer-in-suspend.patch
+576557eeb1ace52c8480c41a463492ace46c20f56ae99d52960c67162771694b5d4b097dcf31680e71862af9070eb8d0dfea34a9b36774791188cd3a7d450774  0002-OMAPDSS-dsi-reset-DSI-on-init.patch
+4d511c46c39d7018fceed5d19e7bfe0acb9a248b894ad4686bc0d8f038acc54509c7644534ddda78f196136600064dbfafd419eb5d0656f43c19d324fecb349b  0003-OMAPDSS-panel-dsi-cm-convert-from-taal-to-pyrenees.patch
+7d24f8afbf9a0ddb8314667b51ff97b9e94e4e8e41f2bfcd757fbbb9d772f105c267938cba05bcdf8063844b2ed8a71bc1e942630ef0517e7972c62c44078967  0004-OMAPDSS-DSI-HACK-don-t-warn-in-dsi_sync_vc-when-call.patch
+57de61a9952a08ec229b65912e0d169783318946a811ca883be2704f4c65a8516cf024e30025f7721c48bcb4662644815249ef7c009cb3faf76f1253b29e4a32  0005-ARM-dts-N9-N950-Add-OMAPDSS-support.patch
+b59619669e18221000ef0f1f565136b7b37e026bf97ac164684684bcdb5b7a192e2190a8ba9aed1d3f22b1ffc70134f322a16b96fc70cc4068eb8f419ce4c44d  0006-ARM-N9-N950-Add-PVR-drivers.patch
+e2fd28744411b5fff52a80aec5ab86fdb079fe65e023d0aaae811a9bb008118dd641745355ad3909b34425abf56c4121aee6820ba1f19e87e4b327d7a32f701d  0007-ARM-dts-N9-Add-keyboard-support.patch
+a882fda4d2aac042ca5fb66338415aabc7c638a5deaa7f073b3e6c6d91773d14e0fd6c775af0b0a6436f32e99dbd1157ea80c94d5a3fdcf21e9af135f78d35b1  0008-ARM-dts-N9-N950-Add-touchscreen-support.patch
+2d11db56ae9bb8854187df8d810e90c1d5b4a1ec64d42d25be52e085b45742829aa99dee46aa2935606227cb9f481e98b07cd39bf1b85ee53295cc757319e7fa  0009-ARM-dts-N9-Add-wireless-support.patch
+14d20424bd1b6e206e4957a1dc81b40c05df47095d269a3908a6ab390dffe9586417dc8650f8c006af14c82f216caf4df3dbdfdad15aec5ecb5274d18e9df04a  0010-leds-lp5521-Add-r-to-batt-dt-property.patch
+61c8eb2f2624f24c3f72bd28631a122517bea9264004e0915fcec4d47b17c3a8898309e42049f12f2327583dffe4a69683e19742924ad25e3c3248b0598aac19  0011-ARM-dts-N9-Add-lp5521-support.patch
+0b696d208f2c8a3ec8c13a93405b67642ba83e32810c0b773762dd5a002c8088c216c08970828a2b29c8866c2a6c4f5a67c15132bf2841853641730c198f7792  0012-power_supply-Add-support-for-TWL5031-BCC.patch
+d733d91572d10f212b28a8ffcb40c1bb707fe9b0724fe834319518e1b3176aafc753a3960bb536b2ea1259bbe792585498786db549d5186f65527c987f1670d4  0013-ARM-dts-N9-N950-Add-support-for-TWL5031-BCC.patch
+2a3d0875047c328a939943178d16d0fb7d1f638a23bfd3df51da4d29616d358c732151139e7aecf9ba201ba31ecdd849616c67051265c96caf70a7950f3d4ede  0014-input-Add-SPI-vibra-support.patch
+c3cb30704548581caf5930bb3cad2be7c5afe0a4b0dfac63f5a3f7898d41a52fa0f595a4a01ae909c03e39b9ef61cee545c50c867d5b973567e7b55a89eea5ba  0015-ARM-dts-N9-Add-vibra-support.patch
+0bf33573699a12b3750a1c50cae4a3a58009ed0231fa74bc1b9480c5669daab021ed640543cb5d69fca0c6878de6d1913152eff7e49d47f47851a9e13f50d429  0016-ARM-dts-N9-Add-support-for-AK8975-magnetometer.patch
+5be94dff5a950a969b741ec4b69d973577677862c45cb8478ddb42299859e5d4b7f442f1e8d32f20601b58f83d7c11d6e3f5b2ed26b41e17c5e2be5eb10800a1  0017-ASoC-tlv320dac33-Add-device-tree-support.patch
+11ed55092f8c86af694a96e7d571b3ae2bc1b396f5e7f3f1af76fd47c3ecc127672364de1e917f9d156021563a2d877a395b2424f05296e40f58e4aa7ee49008  0018-mfd-wl1273-Add-device-tree-support.patch
+d4e8cdcf948204a8f906d49b5504455f839107aab4df139883cc6952c703eec89c76720b80247674f37371a58f3319521709a906c726ecf6af571ede1462c587  0019-media-radio-wl1273-Fix-V4L2_CID_TUNE_PREEMPHASIS-con.patch
+547b914377863d4cf33b14e0563d60dcfe59999597844685d836249657e3f4cb07882ae8fddf3e5884147607e471328ada37b3f12995c9594952ccf1597137e9  0020-ASoC-n9-Add-support-for-Nokia-N9-N950.patch
+4992d80ce94421e55aa5eb72808b04c4130ff1862c68a833789a469adfd6654106305a8f855b16d5f8ae372a6c42418857e94f7d8caa5fa461d32666f1005f99  0021-input-mfd-Add-support-for-TWL5031-ACI-Nokia-ECI.patch
+1ab47225dbdb65fdbb2e100f18719da56e3b057b0ba3f846d3ac76a40ada1e031e88452a1909c709d73a1e48a7e04eeb73558ddff740916e076f111bd6ed1b8c  0022-ARM-dts-N9-N950-Add-ACI-ECI-support.patch
+de9bd826f208e216b80cba8c63a9e4ee2ae633cad30474ff6c266520cce44a718209fe1f31aab067e1848bd74beaf500033e7d9986701ed91a8ce95eeb5974d2  0023-Revert-fat-permit-to-return-phy-block-number-by-fibm.patch
+c32c9469d54587347555f14aafe6d9736d51851e83063c0442ce4fb6cd71ac4921e20bc5ac7d96c6eda1b618b6b238fcf58bdc58b0f5e794acd2e93b32b9c0b8  0024-Revert-fat-skip-cluster-allocation-on-fallocated-reg.patch
+4cc7677a46bca7ce9bd9a016d0c898ad8d9c98cf8d0f6b97daa67d000038488b702fd311a045232dd6b90badf3c5c2c912f0b4842d9d51e582fe6ed5b9d3e40e  0025-Revert-fat-add-fat_fallocate-operation.patch
+42c5dfbb8247d624aa2cea479d08dd88f65183479fb7a6231f075cceb65d35118e372b6a370cc5b2ee5551bab8765e3189e17c536b20f11a52f26616204776c4  0026-misc-apds990x-Add-device-tree-support.patch
+119ea13c05931e0e1c119ae45cc33e3b3cb2a893b1a988f75f9c1f1949fe9b4f499243c333e6e6983bbff5a20ac8ffcec848ee2210abab4c6ca37dd8dd9b5e4f  0027-misc-apds990x-convert-to-iio.patch
+8e8f918b3cd42b3d12832e5847eb3ee185b2c756a9bc582616c4c9e4a1b3f7f24d004e2718c955146828e545cfc3d40886ad9701dfefa48f900e19c15cb940a0  0028-iio-apds990x-move-from-misc-to-iio-light.patch
+83c5ef073a28dcccd3f5f5b29e1cda28fd0101828dc0dfbd55110270daf4b6207a5d37f37b8f6b859cabb86e523908105c5072844dc3b160ff2e947dc81432df  0029-ARM-dts-N9-Add-support-for-apds990x-ALS-PS.patch
+7b3af8b2df7b2e7809f0b43605b608fa1a321b9aa8efb6ba7340740b007452f0dd29f0618cb489bcdbc3aa3b6ed3f866bbc11318e30460824850521c4ebdca2b  0030-Revert-drm-omapdrm-Remove-manual-update-display-supp.patch
+498821edd5176ebd0cffcfafa1d03dcd997170af7d75f1722d7d389d454a7f59313b7fe71157ba455704ee8b56ce5b29f854ab0bf28912593e38103ee1c0ad0a  0031-drm-omapdrm-wait-for-pending-operations-before-updat.patch
+258857312a13ea9c0a58edf6742fd9d3ec82e5c4267cb88df25c8067d0938ce27ce7b7b9af6d50534f9308a88fec114c485850eeb29b5de72bcce54cc943c86c  0032-drm-omapdrm-crtc-switch-pending-variable-to-atomic-b.patch
+6832400b3be06142f0eb03961bd88c840322cea3c49ef2234c4345d93601968a503e31cc71f103e6e046a3fdf7d6ca351167f51112807456a126082e7fd1de94  0033-drm-omapdrm-crtc-add-enabled-bit-to-state.patch
+70ee9ceba0f7e500ad1dc431d820f8e2af6dec45e28c293661ea14929e0c1cc194e10228ea3a93a983a977adb2d1e5d987f0174d3b9830da7b769486ae88c96b  0034-drm-omapdrm-dss-method-to-get-stallmode-from-lcd-con.patch
+f156f3722d90676dc1f9684d3f2cf0037e0f87060a697e733e7711e2bfb32e82847ee6d695ef199fafa2262ce9e2b9f7b44b422ca20ea7ccd0169755fe9c8bfa  0035-drm-omapdrm-crtc-detect-manually-updated-displays.patch
+78e9d4c8a63b760294718f85c679b9d1d7580d16c6848d88ce98fe055e002c2977d6868f6dc917f2e3388f8eed3153dc855413d72447aef5dde1640c911cd06b  0036-include-video-omapdss-provide-fifo-threshold-methods.patch
+1ca29111dd43385bf471873866fa571a2a4086af8143ac0be341b9e80a681b566202f207df19a2d6d14adfc5297e53b9f10dddb96b06e00013778bd44bfdcd7f  0037-drm-omapdrm-plane-update-fifo-size-on-atomic-update.patch
+b3ebbf9e82f4ac03353bdbabcc3a5b3c5671514c1526b9298631f19cc810e3cf9bf2554b613ed70904397678882a9ea39e78c2d305729619f4286121618db435  0038-drm-omapdrm-crtc-update-plane-fifos-on-lcd-config-ch.patch
+07bbafb970bd883330ac740bab3ee11a29dee31c408693dd02769f8ff86a6e12b62e414a9de633047c1d2b8fe90fe4619609680756d1b7ac18dc8464d1d2aabf  0039-drm-omapdrm-crtc-save-framedone-callback-from-dss.patch
+3285ff68048c734210ee5b8a030df4229878971f48619a0d56b08fb3a715441b2f35adb3e11084d79d6b430e45c550b6bda1ce67d0416101546726ef8c0cc964  0040-drm-omapdrm-crtc-add-support-for-manual-updated-disp.patch
+c11076f681ccf496e2ae7a3d3b9a869133f81c9a0d2a9370b9d394b73d13f6be9d33b8ae342eb65483e2ebf1fcc4e29f39c6752e2b98be4aac151dc24ef0da0b  0041-drm-omapdrm-update-manual-displays-on-dirty-ioctl.patch
+12ebdbc7df0b21ef3ed881d62044f95a8b2cdbeecc2352fb89548972476ade708d272902467ac8a15b60f479292fef0ecdc4a9917e4e267e87dddf97abdca162  0042-drm-omapdrm-panel-dsi-cm-add-regulator-support.patch
+aead802da303ec04658f0a432455c5c2a9ab9342a0567244efc353200f0790c462c9dbcf74be64933610a2dc585486184a7d8310009f3654fd8b3140a3a82716  0043-drm-omapdrm-panel-dsi-cm-use-threaded-irq-handler.patch
+baae93beb752cf3f73110a986fb7decc982f75ba7436635afae125a68cf9dab03d989457fb5bfe37d468d31d8047ba3f075f4de310ee74f16aaf28fda6cb607d  0044-drm-omapdrm-panel-dsi-cm-improve-DT-support.patch
+6bda73286d82ea3aa181caa60949f4c535bab44ea49ef264b57584903a3ac4d4ff30c16649125db51b75002b3db21db81690c65b34d57a2fc2856ccabcbd6724  0045-drm-omapdrm-panel-dsi-cm-add-offset-support.patch
+1df6f84db743e84339ac6d0c2718c139557c0847ec5bdebad3855978d6b9caf24f69b3b8858d81029a68954e7480e10c8879c2f6a3f48c2c34b68c1e209e483d  0046-drm-omapdrm-panel-dsi-cm-block-disable-until-update-.patch
+5dd0c258bef1142cce00fd587618cb0b3e5276c52c2d9e95f1b57b903636a545577edeb9191a37434f3cfadfed4ad4a4d42cdd4c993daabf196c377876a13579  0047-drm-omapdrm-panel-dsi-cm-ratelimit-debug-output-in-u.patch
+8acedbd4610da656d865bcbb6be0b82ad3c0c1c4b218c4eb3fd23d7692cb74bee8ec1638d426061b7218265bac4b2c114ad046e629dda28e354fccf43b6049c6  0048-drm-omapdrm-panel-dsi-cm-provide-timings-methods-for.patch
+190186395181caceec499cf3e6b7f415ff7d58492660f7d40ba694364d744ff34588dfe3db2ac436ae8f6722d8b145ad1761e5abb93084cf6db91c1c2f8b0f84  0049-drm-omapdrm-panel-dsi-cm-add-rotation-support.patch
+5d2fa3c3e1328a89737efdea3d49361c6a4560c5fe7168b6f1f00366cf2451557a2bef635e1cc291d098a2a72225187b5cf9a6cccd08106fdbe7eac9fd8789ce  0050-ARM-N9-N950-add-additional-DT-data-for-panel-dsi-cm.patch
+eb135858ba3e0cb0f0b8ce24990f79b5a55fd40f8d9ee77f988ac18e9637818ba1e48491bd445423f918cae65fc439736b792dcd551c3851220a180465730cfe  0051-drm-omapdrm-panel-dsi-cm-add-DT-rotation-support.patch
+e1036f4f5c7417d957e269b1113998916d9288250a1db5ee8594e0bebb8dbfb7579d1763970e64bd6f55c227ae88d22912c8b04d3e8d91f48d9d5f913efaafb4  0052-ARM-N9-set-DT-data-for-panel-dsi-cm.patch
+b191bda50e93ee313ef86dc3a75cf88a27509edc6e001372a15d16ff303224587fe166a72f2333f39170c6fee4342f2799a505bee112a0dbcd6f9302108f2e11  0053-ARM-N9-Add-n9_defconfig.patch
+e41af908ae8794489e2c3308b54ce48ec647bbd5b237a3447fd426dfd1efa33eeee6c90964f448f532421f8f61e40b6639bfdb04bc835c318cca1707b723908e  config-nokia-n9.armhf
+d80980e9474c82ba0ef1a6903b434d8bd1b092c40367ba543e72d2c119301c8b2d05265740e4104ca1ac5d15f6c4aa49e8776cb44264a9a28dc551e0d1850dcc  compiler-gcc6.h"

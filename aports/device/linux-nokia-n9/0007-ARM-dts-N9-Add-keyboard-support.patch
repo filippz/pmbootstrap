@@ -1,0 +1,40 @@
+From 3b14eb8e77791ed75bcb4a2d57661ab95a81debf Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Filip=20Matijevi=C4=87?= <filip.matijevic.pz@gmail.com>
+Date: Sat, 7 Nov 2015 21:19:28 +0100
+Subject: [PATCH 07/53] ARM: dts: N9: Add keyboard support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Filip Matijević <filip.matijevic.pz@gmail.com>
+---
+ arch/arm/boot/dts/omap3-n9.dts | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/arch/arm/boot/dts/omap3-n9.dts b/arch/arm/boot/dts/omap3-n9.dts
+index a5c1b2ceb184..517c13c8e314 100644
+--- a/arch/arm/boot/dts/omap3-n9.dts
++++ b/arch/arm/boot/dts/omap3-n9.dts
+@@ -11,6 +11,7 @@
+ /dts-v1/;
+
+ #include "omap3-n950-n9.dtsi"
++#include <dt-bindings/input/input.h>
+
+ / {
+	model = "Nokia N9";
+@@ -72,6 +73,12 @@
+	st,max-limit-z = <46>;
+ };
+
++&twl_keypad {
++	linux,keymap = < MATRIX_KEY(6, 8, KEY_VOLUMEUP)
++			 MATRIX_KEY(7, 8, KEY_VOLUMEDOWN)
++			 >;
++};
++
+ &lcd0 {
+	compatible = "smd,pyrenees", "panel-dsi-cm";
+ };
+--
+2.11.0

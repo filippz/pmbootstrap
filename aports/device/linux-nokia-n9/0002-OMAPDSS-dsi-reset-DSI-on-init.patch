@@ -1,0 +1,72 @@
+From 9ef712ce7750b6c6404c84645429ee3a207473d5 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Filip=20Matijevi=C4=87?= <filip.matijevic.pz@gmail.com>
+Date: Sun, 4 Oct 2015 16:49:03 +0200
+Subject: [PATCH 02/53] OMAPDSS: dsi: reset DSI on init
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If DSI subsystem was initialized by boot loader(s) then RESET_DATA bit
+in DSI_COMPLEXIO_CFG1 register is already set. Do soft reset by using
+DSI_SYSCONFIG register.
+
+Signed-off-by: Filip Matijević <filip.matijevic.pz@gmail.com>
+---
+ drivers/video/fbdev/omap2/omapfb/dss/dsi.c | 28 ++++++++++++++++++++++++++++
+ 1 file changed, 28 insertions(+)
+
+diff --git a/drivers/video/fbdev/omap2/omapfb/dss/dsi.c b/drivers/video/fbdev/omap2/omapfb/dss/dsi.c
+index 30d49f3800b3..d2aa8baadf83 100644
+--- a/drivers/video/fbdev/omap2/omapfb/dss/dsi.c
++++ b/drivers/video/fbdev/omap2/omapfb/dss/dsi.c
+@@ -4256,6 +4256,28 @@ static void dsi_display_uninit_dsi(struct platform_device *dsidev,
+	dsi_pll_uninit(dsidev, disconnect_lanes);
+ }
+
++static int dsi_wait_reset(struct platform_device *dsidev)
++{
++	int t = 0;
++
++	while (REG_GET(dsidev, DSI_SYSSTATUS, 0, 0) == 0) {
++		if (++t > 5) {
++			DSSERR("soft reset failed\n");
++			return -ENODEV;
++		}
++		udelay(1);
++	}
++
++	return 0;
++}
++
++static int dsi_reset(struct platform_device *dsidev)
++{
++	/* Soft reset */
++	dsi_write_reg(dsidev, DSI_SYSCONFIG, 0x2);
++	return dsi_wait_reset(dsidev);
++}
++
+ static int dsi_display_enable(struct omap_dss_device *dssdev)
+ {
+	struct platform_device *dsidev = dsi_get_dsidev_from_dssdev(dssdev);
+@@ -5422,6 +5444,10 @@ static int dsi_bind(struct device *dev, struct device *master, void *data)
+	if (r)
+		goto err_runtime_get;
+
++	r = dsi_reset(dsidev);
++	if (r)
++		goto err_reset;
++
+	rev = dsi_read_reg(dsidev, DSI_REVISION);
+	dev_dbg(&dsidev->dev, "OMAP DSI rev %d.%d\n",
+	       FLD_GET(rev, 7, 4), FLD_GET(rev, 3, 0));
+@@ -5469,6 +5495,8 @@ static int dsi_bind(struct device *dev, struct device *master, void *data)
+
+ err_probe_of:
+	dsi_uninit_output(dsidev);
++
++err_reset:
+	dsi_runtime_put(dsidev);
+
+ err_runtime_get:
+--
+2.11.0

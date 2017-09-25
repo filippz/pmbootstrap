@@ -1,0 +1,110 @@
+From 21543e67b861f342bf3a050a6f506fa464593b2f Mon Sep 17 00:00:00 2001
+From: Sebastian Reichel <sre@kernel.org>
+Date: Wed, 2 Mar 2016 16:48:10 +0100
+Subject: [PATCH 32/53] drm: omapdrm: crtc: switch pending variable to atomic
+ bitset
+
+Having the pending variable available as atomic bit helps
+with the later addition of manually updated display support.
+
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/gpu/drm/omapdrm/omap_crtc.c | 31 +++++++++++++++++--------------
+ 1 file changed, 17 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/gpu/drm/omapdrm/omap_crtc.c b/drivers/gpu/drm/omapdrm/omap_crtc.c
+index 8dea89030e66..892aaf120c5a 100644
+--- a/drivers/gpu/drm/omapdrm/omap_crtc.c
++++ b/drivers/gpu/drm/omapdrm/omap_crtc.c
+@@ -28,6 +28,11 @@
+
+ #define to_omap_crtc(x) container_of(x, struct omap_crtc, base)
+
++enum omap_crtc_state {
++	crtc_enabled	= 0,
++	crtc_pending	= 1
++};
++
+ struct omap_crtc {
+	struct drm_crtc base;
+
+@@ -41,7 +46,7 @@ struct omap_crtc {
+
+	bool ignore_digit_sync_lost;
+
+-	bool pending;
++	unsigned long state;
+	wait_queue_head_t pending_wait;
+ };
+
+@@ -77,7 +82,7 @@ int omap_crtc_wait_pending(struct drm_crtc *crtc)
+	 * a single frame refresh even on slower displays.
+	 */
+	return wait_event_timeout(omap_crtc->pending_wait,
+-				  !omap_crtc->pending,
++				  !test_bit(crtc_pending, &omap_crtc->state),
+				  msecs_to_jiffies(250));
+ }
+
+@@ -302,10 +307,8 @@ static void omap_crtc_vblank_irq(struct omap_drm_irq *irq, uint32_t irqstatus)
+
+	__omap_irq_unregister(dev, &omap_crtc->vblank_irq);
+
+-	rmb();
+-	WARN_ON(!omap_crtc->pending);
+-	omap_crtc->pending = false;
+-	wmb();
++	if (!test_and_clear_bit(crtc_pending, &omap_crtc->state))
++		dev_warn(dev->dev, "pending bit was not set in vblank irq");
+
+	/* wake up userspace */
+	omap_crtc_complete_page_flip(&omap_crtc->base);
+@@ -335,13 +338,12 @@ static void omap_crtc_destroy(struct drm_crtc *crtc)
+ static void omap_crtc_enable(struct drm_crtc *crtc)
+ {
+	struct omap_crtc *omap_crtc = to_omap_crtc(crtc);
++	struct drm_device *dev = crtc->dev;
+
+	DBG("%s", omap_crtc->name);
+
+-	rmb();
+-	WARN_ON(omap_crtc->pending);
+-	omap_crtc->pending = true;
+-	wmb();
++	if (test_and_set_bit(crtc_pending, &omap_crtc->state))
++		dev_warn(dev->dev, "crtc enable while pending bit set!");
+
+	omap_irq_register(crtc->dev, &omap_crtc->vblank_irq);
+
+@@ -398,6 +400,7 @@ static void omap_crtc_atomic_flush(struct drm_crtc *crtc,
+                                   struct drm_crtc_state *old_crtc_state)
+ {
+	struct omap_crtc *omap_crtc = to_omap_crtc(crtc);
++	struct drm_device *dev = crtc->dev;
+
+	WARN_ON(omap_crtc->vblank_irq.registered);
+
+@@ -418,10 +421,8 @@ static void omap_crtc_atomic_flush(struct drm_crtc *crtc,
+
+		DBG("%s: GO", omap_crtc->name);
+
+-		rmb();
+-		WARN_ON(omap_crtc->pending);
+-		omap_crtc->pending = true;
+-		wmb();
++		if (test_and_set_bit(crtc_pending, &omap_crtc->state))
++			dev_warn(dev->dev, "atomic flush while pending bit set!");
+
+		dispc_mgr_go(omap_crtc->channel);
+		omap_irq_register(crtc->dev, &omap_crtc->vblank_irq);
+@@ -543,6 +544,8 @@ struct drm_crtc *omap_crtc_init(struct drm_device *dev,
+
+	init_waitqueue_head(&omap_crtc->pending_wait);
+
++	omap_crtc->state = 0;
++
+	omap_crtc->channel = channel;
+	omap_crtc->name = channel_names[channel];
+
+--
+2.11.0

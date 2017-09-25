@@ -1,0 +1,71 @@
+From 6fb905ed53cae1ee0cf16bba2efc937cf8772daa Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Filip=20Matijevi=C4=87?= <filip.matijevic.pz@gmail.com>
+Date: Mon, 26 Dec 2016 20:13:26 +0100
+Subject: [PATCH 45/53] drm: omapdrm: panel-dsi-cm: add offset support
+
+The Nokia N950 contains a panel, that is partially
+covered, so that not the whole display is visible.
+Thus the image must be displayed with an offset.
+
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c | 22 +++++++++++++++++-----
+ 1 file changed, 17 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c b/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
+index baed358e48ad..c377badd57b3 100644
+--- a/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
++++ b/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
+@@ -45,6 +45,9 @@ struct panel_drv_data {
+
+	struct videomode vm;
+
++	int offset_x;
++	int offset_y;
++
+	struct platform_device *pdev;
+
+	struct mutex lock;
+@@ -202,12 +205,17 @@ static int dsicm_set_update_window(struct panel_drv_data *ddata,
+ {
+	struct omap_dss_device *in = ddata->in;
+	int r;
+-	u16 x1 = x;
+-	u16 x2 = x + w - 1;
+-	u16 y1 = y;
+-	u16 y2 = y + h - 1;
+-
+	u8 buf[5];
++	u16 x1, x2, y1, y2;
++
++	x += ddata->offset_x;
++	y += ddata->offset_y;
++
++	x1 = x;
++	x2 = x + w - 1;
++	y1 = y;
++	y2 = y + h - 1;
++
+	buf[0] = MIPI_DCS_SET_COLUMN_ADDRESS;
+	buf[1] = (x1 >> 8) & 0xff;
+	buf[2] = (x1 >> 0) & 0xff;
+@@ -1208,6 +1216,8 @@ static int dsicm_probe_of(struct platform_device *pdev)
+
+	of_property_read_u32(node, "resolution-x", (u32*) &ddata->vm.vactive);
+	of_property_read_u32(node, "resolution-y", (u32*) &ddata->vm.hactive);
++	of_property_read_u32(node, "offset-x", &ddata->offset_x);
++	of_property_read_u32(node, "offset-y", &ddata->offset_y);
+
+	ddata->vm.pixelclock = ddata->vm.vactive * ddata->vm.hactive * 60;
+
+@@ -1243,6 +1253,8 @@ static int dsicm_probe(struct platform_device *pdev)
+	ddata->vm.hactive = 864;
+	ddata->vm.vactive = 480;
+	ddata->vm.pixelclock = 864 * 480 * 60;
++	ddata->offset_x = 0;
++	ddata->offset_y = 0;
+
+	dssdev = &ddata->dssdev;
+	dssdev->dev = dev;
+--
+2.11.0

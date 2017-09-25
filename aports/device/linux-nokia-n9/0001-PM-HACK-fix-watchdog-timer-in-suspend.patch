@@ -1,0 +1,148 @@
+From e8e436e668b7ddec6ee240064640848d5aa92429 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Filip=20Matijevi=C4=87?= <filip.matijevic.pz@gmail.com>
+Date: Tue, 22 Sep 2015 20:44:49 +0200
+Subject: [PATCH 01/53] PM: HACK: fix watchdog timer in suspend
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The watchdog timer cannot be stopped in N9 once it has
+been started. Hence the normal watcdog disable does not
+work in suspend.
+
+Created a hacky workaround to start a always-on timer
+to wake up the system just before the watchdog would reset
+the device.
+
+Patch based on a debug patch for suspend wake up timers
+from Santosh Shilimkar, and N9 kernel 3.5 kernel adaptation
+from Kalle Jokiniemi
+
+Signed-off-by: Filip Matijević <filip.matijevic.pz@gmail.com>
+---
+ arch/arm/mach-omap2/timer.c    | 19 +++++++++++++++++--
+ drivers/watchdog/omap_wdt.c    | 12 ++++++++++++
+ drivers/watchdog/twl4030_wdt.c | 13 +++++++++++++
+ 3 files changed, 42 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/mach-omap2/timer.c b/arch/arm/mach-omap2/timer.c
+index 07dd692c4737..73269ef1ab99 100644
+--- a/arch/arm/mach-omap2/timer.c
++++ b/arch/arm/mach-omap2/timer.c
+@@ -65,6 +65,9 @@
+
+ /* Clockevent code */
+
++/* HACK: global variable for waking the system up from suspend after timeout */
++u32	wakeup_timer_seconds;
++
+ static struct omap_dm_timer clkev;
+ static struct clock_event_device clockevent_gpt;
+
+@@ -105,6 +108,18 @@ static int omap2_gp_timer_set_next_event(unsigned long cycles,
+ static int omap2_gp_timer_shutdown(struct clock_event_device *evt)
+ {
+	__omap_dm_timer_stop(&clkev, OMAP_TIMER_POSTED, clkev.rate);
++	if (wakeup_timer_seconds) {
++		__omap_dm_timer_write(&clkev, OMAP_TIMER_LOAD_REG,
++		0xffffffff - (clkev.rate * wakeup_timer_seconds), 1);
++		__omap_dm_timer_load_start(&clkev, OMAP_TIMER_CTRL_ST,
++		0xffffffff - (clkev.rate * wakeup_timer_seconds), 1);
++	}
++	return 0;
++}
++
++static int omap2_gp_timer_oneshot(struct clock_event_device *evt)
++{
++	__omap_dm_timer_stop(&clkev, OMAP_TIMER_POSTED, clkev.rate);
+	return 0;
+ }
+
+@@ -132,8 +147,8 @@ static struct clock_event_device clockevent_gpt = {
+	.set_next_event		= omap2_gp_timer_set_next_event,
+	.set_state_shutdown	= omap2_gp_timer_shutdown,
+	.set_state_periodic	= omap2_gp_timer_set_periodic,
+-	.set_state_oneshot	= omap2_gp_timer_shutdown,
+-	.tick_resume		= omap2_gp_timer_shutdown,
++	.set_state_oneshot	= omap2_gp_timer_oneshot,
++	.tick_resume		= omap2_gp_timer_oneshot,
+ };
+
+ static struct property device_disabled = {
+diff --git a/drivers/watchdog/omap_wdt.c b/drivers/watchdog/omap_wdt.c
+index 1b02bfa81b29..575ba4dbf12a 100644
+--- a/drivers/watchdog/omap_wdt.c
++++ b/drivers/watchdog/omap_wdt.c
+@@ -44,6 +44,8 @@
+
+ #include "omap_wdt.h"
+
++extern u32 wakeup_timer_seconds;
++
+ static bool nowayout = WATCHDOG_NOWAYOUT;
+ module_param(nowayout, bool, 0);
+ MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started "
+@@ -328,6 +330,15 @@ static int omap_wdt_suspend(struct platform_device *pdev, pm_message_t state)
+
+	mutex_lock(&wdev->lock);
+	if (wdev->omap_wdt_users) {
++		/*
++		 * HACK: cannot stop the wd in N9, so set up a wakeup before
++		 * we reset. Checking here also if twl4030 has already set a
++		 * suitable wake up so we don't screw it up.
++		 */
++		if (wakeup_timer_seconds > timer_margin - 1 ||
++							!wakeup_timer_seconds)
++			wakeup_timer_seconds = timer_margin - 1;
++		omap_wdt_ping(&wdev->wdog);
+		omap_wdt_disable(wdev);
+		pm_runtime_put_sync(wdev->dev);
+	}
+@@ -343,6 +354,7 @@ static int omap_wdt_resume(struct platform_device *pdev)
+	mutex_lock(&wdev->lock);
+	if (wdev->omap_wdt_users) {
+		pm_runtime_get_sync(wdev->dev);
++		wakeup_timer_seconds = 0;
+		omap_wdt_enable(wdev);
+		omap_wdt_reload(wdev);
+	}
+diff --git a/drivers/watchdog/twl4030_wdt.c b/drivers/watchdog/twl4030_wdt.c
+index 9bf3cc0f3961..1764b70efa9f 100644
+--- a/drivers/watchdog/twl4030_wdt.c
++++ b/drivers/watchdog/twl4030_wdt.c
+@@ -28,6 +28,8 @@
+
+ #define TWL4030_WATCHDOG_CFG_REG_OFFS	0x3
+
++extern u32 wakeup_timer_seconds;
++
+ static bool nowayout = WATCHDOG_NOWAYOUT;
+ module_param(nowayout, bool, 0);
+ MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started "
+@@ -110,6 +112,15 @@ static int twl4030_wdt_remove(struct platform_device *pdev)
+ static int twl4030_wdt_suspend(struct platform_device *pdev, pm_message_t state)
+ {
+	struct watchdog_device *wdt = platform_get_drvdata(pdev);
++
++	/* reset wd timer, just in case it cannot be stopped */
++	twl4030_wdt_start(wdt);
++
++	/* HACK: cannot stop the wd in N9, so set up a wakeup before we reset */
++	if (wakeup_timer_seconds > wdt->timeout - 1 ||
++						!wakeup_timer_seconds)
++		wakeup_timer_seconds = wdt->timeout - 1;
++
+	if (watchdog_active(wdt))
+		return twl4030_wdt_stop(wdt);
+
+@@ -119,6 +130,8 @@ static int twl4030_wdt_suspend(struct platform_device *pdev, pm_message_t state)
+ static int twl4030_wdt_resume(struct platform_device *pdev)
+ {
+	struct watchdog_device *wdt = platform_get_drvdata(pdev);
++
++	wakeup_timer_seconds = 0;
+	if (watchdog_active(wdt))
+		return twl4030_wdt_start(wdt);
+
+--
+2.11.0

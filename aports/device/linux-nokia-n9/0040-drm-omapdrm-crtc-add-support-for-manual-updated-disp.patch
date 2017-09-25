@@ -1,0 +1,203 @@
+From 29ce002e8c2b6744bc2e7032fafa437445537e8e Mon Sep 17 00:00:00 2001
+From: Sebastian Reichel <sre@kernel.org>
+Date: Wed, 2 Mar 2016 17:17:10 +0100
+Subject: [PATCH 40/53] drm: omapdrm: crtc: add support for manual updated
+ displays
+
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/gpu/drm/omapdrm/omap_crtc.c | 100 +++++++++++++++++++++++++++++++++++-
+ drivers/gpu/drm/omapdrm/omap_drv.h  |   2 +
+ 2 files changed, 100 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/omapdrm/omap_crtc.c b/drivers/gpu/drm/omapdrm/omap_crtc.c
+index 0f457e72b171..94da2a7d97c2 100644
+--- a/drivers/gpu/drm/omapdrm/omap_crtc.c
++++ b/drivers/gpu/drm/omapdrm/omap_crtc.c
+@@ -44,12 +44,14 @@ struct omap_crtc {
+	bool manually_updated;
+
+	struct omap_drm_irq vblank_irq;
++	struct omap_drm_irq framedone_irq;
+	struct omap_drm_irq error_irq;
+
+	bool ignore_digit_sync_lost;
+
+	unsigned long state;
+	wait_queue_head_t pending_wait;
++	struct delayed_work update_work;
+
+	void (*framedone_handler)(void *);
+	void *framedone_handler_data;
+@@ -139,6 +141,14 @@ static void omap_crtc_dss_disconnect(enum omap_channel channel,
+
+ static void omap_crtc_dss_start_update(enum omap_channel channel)
+ {
++	struct omap_crtc *omap_crtc = omap_crtcs[channel];
++	struct drm_device *dev = omap_crtc->base.dev;
++
++	WARN_ON(dispc_mgr_is_enabled(channel));
++
++	omap_irq_register(dev, &omap_crtc->framedone_irq);
++
++	dispc_mgr_enable(channel, true);
+ }
+
+ /* Called only from the encoder enable/disable and suspend/resume handlers. */
+@@ -212,8 +222,11 @@ static void omap_crtc_set_enabled(struct drm_crtc *crtc, bool enable)
+ static int omap_crtc_dss_enable(enum omap_channel channel)
+ {
+	struct omap_crtc *omap_crtc = omap_crtcs[channel];
++	struct drm_device *dev = omap_crtc->base.dev;
+	struct omap_overlay_manager_info info;
+
++	dev_dbg(dev->dev, "crtc dss enable %s", omap_crtc->name);
++
+	memset(&info, 0, sizeof(info));
+	info.default_color = 0x00000000;
+	info.trans_key = 0x00000000;
+@@ -233,6 +246,9 @@ static int omap_crtc_dss_enable(enum omap_channel channel)
+ static void omap_crtc_dss_disable(enum omap_channel channel)
+ {
+	struct omap_crtc *omap_crtc = omap_crtcs[channel];
++	struct drm_device *dev = omap_crtc->base.dev;
++
++	dev_dbg(dev->dev, "crtc dss disable %s", omap_crtc->name);
+
+	clear_bit(crtc_enabled, &omap_crtc->state);
+
+@@ -368,6 +384,75 @@ static void omap_crtc_vblank_irq(struct omap_drm_irq *irq, uint32_t irqstatus)
+	wake_up(&omap_crtc->pending_wait);
+ }
+
++static void omap_crtc_framedone_irq(struct omap_drm_irq *irq, uint32_t irqstatus)
++{
++	struct omap_crtc *omap_crtc =
++			container_of(irq, struct omap_crtc, framedone_irq);
++	struct drm_device *dev = omap_crtc->base.dev;
++
++	if (omap_crtc->framedone_handler)
++		omap_crtc->framedone_handler(omap_crtc->framedone_handler_data);
++
++	__omap_irq_unregister(dev, &omap_crtc->framedone_irq);
++
++	clear_bit(crtc_pending, &omap_crtc->state);
++	wake_up(&omap_crtc->pending_wait);
++}
++
++void omap_crtc_flush(struct drm_crtc *crtc,
++		int x, int y, int w, int h)
++{
++	struct omap_crtc *omap_crtc = to_omap_crtc(crtc);
++
++	if (!omap_crtc->manually_updated)
++		return;
++
++	if (!test_bit(crtc_enabled, &omap_crtc->state))
++		return;
++
++	if (!delayed_work_pending(&omap_crtc->update_work))
++		schedule_delayed_work(&omap_crtc->update_work, 0);
++}
++
++static void omap_crtc_manual_display_update(struct work_struct *data)
++{
++	struct omap_crtc *omap_crtc = container_of(data, struct omap_crtc,
++					update_work.work);
++	struct omap_dss_device *dssdev = omap_crtc_output[omap_crtc->channel];
++	struct omap_dss_driver *dssdrv;
++	int ret;
++
++	if (!dssdev || !dssdev->dst) {
++		dev_err_once(omap_crtc->base.dev->dev, "missing dssdev!\n");
++		return;
++	}
++
++	dssdev = dssdev->dst;
++	dssdrv = dssdev->driver;
++
++	if (!dssdrv)
++		return;
++
++	if (!dssdrv || !dssdrv->update)
++		return;
++
++	if (!test_bit(crtc_enabled, &omap_crtc->state))
++		return;
++
++	if (test_and_set_bit(crtc_pending, &omap_crtc->state))
++		return;
++
++	if (dssdrv->sync)
++		dssdrv->sync(dssdev);
++
++	ret = dssdrv->update(dssdev, 0, 0, omap_crtc->vm.hactive
++									 , omap_crtc->vm.vactive);
++	if (ret < 0) {
++		clear_bit(crtc_pending, &omap_crtc->state);
++		wake_up(&omap_crtc->pending_wait);
++	}
++}
++
+ /* -----------------------------------------------------------------------------
+  * CRTC Functions
+  */
+@@ -392,7 +477,7 @@ static void omap_crtc_enable(struct drm_crtc *crtc)
+	struct drm_device *dev = crtc->dev;
+	struct drm_connector *connector;
+
+-	DBG("%s", omap_crtc->name);
++	dev_dbg(dev->dev, "enable crtc %s", omap_crtc->name);
+
+	/* manual updated display will not trigger vsync irq */
+	/* omap_crtc->manually_updated is not yet set */
+@@ -416,8 +501,14 @@ static void omap_crtc_enable(struct drm_crtc *crtc)
+ static void omap_crtc_disable(struct drm_crtc *crtc)
+ {
+	struct omap_crtc *omap_crtc = to_omap_crtc(crtc);
++	struct drm_device *dev = crtc->dev;
+
+-	DBG("%s", omap_crtc->name);
++	dev_dbg(dev->dev, "disable crtc %s", omap_crtc->name);
++
++	cancel_delayed_work(&omap_crtc->update_work);
++
++	if (!omap_crtc_wait_pending(crtc))
++		dev_warn(dev->dev, "manual display update did not finish!");
+
+	drm_crtc_vblank_off(crtc);
+ }
+@@ -610,6 +701,8 @@ struct drm_crtc *omap_crtc_init(struct drm_device *dev,
+
+	init_waitqueue_head(&omap_crtc->pending_wait);
+
++	INIT_DELAYED_WORK(&omap_crtc->update_work, omap_crtc_manual_display_update);
++
+	omap_crtc->state = 0;
+
+	omap_crtc->channel = channel;
+@@ -618,6 +711,9 @@ struct drm_crtc *omap_crtc_init(struct drm_device *dev,
+	omap_crtc->vblank_irq.irqmask = pipe2vbl(crtc);
+	omap_crtc->vblank_irq.irq = omap_crtc_vblank_irq;
+
++	omap_crtc->framedone_irq.irqmask = dispc_mgr_get_framedone_irq(omap_crtc->channel);
++	omap_crtc->framedone_irq.irq = omap_crtc_framedone_irq;
++
+	omap_crtc->error_irq.irqmask =
+			dispc_mgr_get_sync_lost_irq(channel);
+	omap_crtc->error_irq.irq = omap_crtc_error_irq;
+diff --git a/drivers/gpu/drm/omapdrm/omap_drv.h b/drivers/gpu/drm/omapdrm/omap_drv.h
+index 86ae345df140..7f21b0dc8a18 100644
+--- a/drivers/gpu/drm/omapdrm/omap_drv.h
++++ b/drivers/gpu/drm/omapdrm/omap_drv.h
+@@ -176,6 +176,8 @@ bool omap_connector_get_hdmi_mode(struct drm_connector *connector);
+ bool omap_connector_get_manually_updated(struct drm_connector *connector);
+ void omap_connector_flush(struct drm_connector *connector,
+		int x, int y, int w, int h);
++void omap_crtc_flush(struct drm_crtc *crtc,
++		int x, int y, int w, int h);
+
+ uint32_t omap_framebuffer_get_formats(uint32_t *pixel_formats,
+		uint32_t max_formats, enum omap_color_mode supported_modes);
+--
+2.11.0

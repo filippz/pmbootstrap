@@ -1,0 +1,45 @@
+From 0b50dde503276be014cff2535ece2bc7f376a3e3 Mon Sep 17 00:00:00 2001
+From: Sebastian Reichel <sre@kernel.org>
+Date: Mon, 29 Feb 2016 09:18:57 +0100
+Subject: [PATCH 34/53] drm: omapdrm: dss: method to get stallmode from lcd
+ config
+
+Introduce a new dss method for reading the stallmode
+status from the private lcd config structure.
+
+Signed-off-By: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/gpu/drm/omapdrm/dss/omapdss.h | 1 +
+ drivers/gpu/drm/omapdrm/dss/output.c  | 6 ++++++
+ 2 files changed, 7 insertions(+)
+
+diff --git a/drivers/gpu/drm/omapdrm/dss/omapdss.h b/drivers/gpu/drm/omapdrm/dss/omapdss.h
+index b420dde8c0fb..4f54a56d071e 100644
+--- a/drivers/gpu/drm/omapdrm/dss/omapdss.h
++++ b/drivers/gpu/drm/omapdrm/dss/omapdss.h
+@@ -919,5 +919,6 @@ int dss_mgr_register_framedone_handler(enum omap_channel channel,
+		void (*handler)(void *), void *data);
+ void dss_mgr_unregister_framedone_handler(enum omap_channel channel,
+		void (*handler)(void *), void *data);
++bool dss_lcd_mgr_config_get_stallmode(const struct dss_lcd_mgr_config *config);
+
+ #endif /* __OMAP_DRM_DSS_H */
+diff --git a/drivers/gpu/drm/omapdrm/dss/output.c b/drivers/gpu/drm/omapdrm/dss/output.c
+index a901af5a9bc3..08c730d1dada 100644
+--- a/drivers/gpu/drm/omapdrm/dss/output.c
++++ b/drivers/gpu/drm/omapdrm/dss/output.c
+@@ -214,6 +214,12 @@ void dss_mgr_set_lcd_config(enum omap_channel channel,
+ }
+ EXPORT_SYMBOL(dss_mgr_set_lcd_config);
+
++bool dss_lcd_mgr_config_get_stallmode(const struct dss_lcd_mgr_config *config)
++{
++	return config->stallmode;
++}
++EXPORT_SYMBOL(dss_lcd_mgr_config_get_stallmode);
++
+ int dss_mgr_enable(enum omap_channel channel)
+ {
+	return dss_mgr_ops->enable(channel);
+--
+2.11.0

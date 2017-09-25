@@ -1,0 +1,33 @@
+From d8178d88e569ec7356355e87e10b9f5d3e492e40 Mon Sep 17 00:00:00 2001
+From: Sebastian Reichel <sre@kernel.org>
+Date: Wed, 2 Mar 2016 17:47:36 +0100
+Subject: [PATCH 43/53] drm: omapdrm: panel-dsi-cm: use threaded irq handler
+
+Use threaded irq handler for the tearing effect gpio,
+since it updates the display content, which requires
+too much time for a fastpath irq.
+
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c b/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
+index 539639f13f60..8e01aabca2fe 100644
+--- a/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
++++ b/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
+@@ -1276,9 +1276,9 @@ static int dsicm_probe(struct platform_device *pdev)
+			return r;
+		}
+
+-		r = devm_request_irq(dev, gpio_to_irq(ddata->ext_te_gpio),
+-				dsicm_te_isr,
+-				IRQF_TRIGGER_RISING,
++		r = devm_request_threaded_irq(dev, gpio_to_irq(ddata->ext_te_gpio),
++				NULL, dsicm_te_isr,
++				IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+				"taal vsync", ddata);
+
+		if (r) {
+--
+2.11.0

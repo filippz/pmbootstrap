@@ -1,0 +1,66 @@
+From f66246ac8a7a1f452c915ecf8cfc5cb047606fd3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Filip=20Matijevi=C4=87?= <filip.matijevic.pz@gmail.com>
+Date: Fri, 1 Jul 2016 18:53:43 +0200
+Subject: [PATCH 22/53] ARM: dts: N9/N950: Add ACI/ECI support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Filip Matijević <filip.matijevic.pz@gmail.com>
+---
+ arch/arm/boot/dts/omap3-n950-n9.dtsi | 26 ++++++++++++++++++++++++++
+ 1 file changed, 26 insertions(+)
+
+diff --git a/arch/arm/boot/dts/omap3-n950-n9.dtsi b/arch/arm/boot/dts/omap3-n950-n9.dtsi
+index 22c25d1fbced..5b98fc0dd54b 100644
+--- a/arch/arm/boot/dts/omap3-n950-n9.dtsi
++++ b/arch/arm/boot/dts/omap3-n950-n9.dtsi
+@@ -68,6 +68,10 @@
+		};
+	};
+
++	eci: eci {
++		compatible = "nokia,eci";
++	};
++
+	sound: n9-audio {
+		compatible = "nokia,n9-audio";
+
+@@ -198,6 +202,12 @@
+			OMAP3_CORE1_IOPAD(0x208c, PIN_INPUT  | MUX_MODE4)	/* gpmc_a10.gpio_43 -> FM_INTX */
+		>;
+	};
++
++	tvout_en_gpio: pinmux_tvout_en_gpio {
++		pinctrl-single,pins = <
++			OMAP3_CORE1_IOPAD(0x2086, PIN_INPUT  | MUX_MODE4)	/* gpmc_a7.gpio_40 -> TVOUT_EN */
++		>;
++	};
+ };
+
+ &omap3_pmx_core2 {
+@@ -239,6 +249,22 @@
+			ti,offset_cncl_path = <0x20>; //TWL4030_OFFSET_CNCL_SEL_ARX2
+		};
+	};
++
++	twl5031_aci: aci {
++		compatible = "ti,twl5031-aci";
++
++		pinctrl-names="default";
++		pinctrl-0 = <&tvout_en_gpio>;
++
++		v28-supply = <&vaux1>;
++
++		interrupts = <6>;
++
++		tvout_en_gpio = <&gpio2 8 GPIO_ACTIVE_HIGH>; /* gpio_43 */
++		jack_gpio = <&twl_gpio 0 GPIO_ACTIVE_HIGH>;
++
++		avplugdet_plugged = <1>; /* AVPLUGDET_WHEN_PLUGGED_HIGH */
++	};
+ };
+
+ &twl_gpio {
+--
+2.11.0

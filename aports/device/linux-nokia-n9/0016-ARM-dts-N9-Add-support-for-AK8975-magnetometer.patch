@@ -1,0 +1,33 @@
+From 95138b4a1569a44c2a956b59e39a61c9115b8e60 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Filip=20Matijevi=C4=87?= <filip.matijevic.pz@gmail.com>
+Date: Fri, 1 Jul 2016 18:52:38 +0200
+Subject: [PATCH 16/53] ARM: dts: N9: Add support for AK8975 magnetometer
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Filip Matijević <filip.matijevic.pz@gmail.com>
+---
+ arch/arm/boot/dts/omap3-n9.dts | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/arch/arm/boot/dts/omap3-n9.dts b/arch/arm/boot/dts/omap3-n9.dts
+index 2d6dfa092b5e..9c51ba219af1 100644
+--- a/arch/arm/boot/dts/omap3-n9.dts
++++ b/arch/arm/boot/dts/omap3-n9.dts
+@@ -86,6 +86,13 @@
+	};
+ };
+
++&i2c3 {
++	ak8975@0f {
++		compatible = "asahi-kasei,ak8975";
++		reg = <0x0f>;
++	};
++};
++
+ &mmc3 {
+	vmmc-supply = <&vwlan_fixed>;
+	non-removable;
+--
+2.11.0

@@ -1,0 +1,45 @@
+From 4ed7334685fa2bb37ec741b34943eca8aa353077 Mon Sep 17 00:00:00 2001
+From: Sebastian Reichel <sre@kernel.org>
+Date: Wed, 2 Mar 2016 18:25:48 +0100
+Subject: [PATCH 44/53] drm: omapdrm: panel-dsi-cm: improve DT support
+
+Introduce new DT properties, so that it's possible
+to use different panels with the driver.
+
+* resolution-x (default: 864)
+* resolution-y (default: 480)
+* has-dsi-backlight (default: no backlight)
+
+Signed-off-by: Sebastian Reichel <sre@kernel.org>
+---
+ drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c b/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
+index 8e01aabca2fe..baed358e48ad 100644
+--- a/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
++++ b/drivers/gpu/drm/omapdrm/displays/panel-dsi-cm.c
+@@ -1204,7 +1204,12 @@ static int dsicm_probe_of(struct platform_device *pdev)
+
+	ddata->in = in;
+
+-	/* TODO: ulps, backlight */
++	ddata->use_dsi_backlight = of_property_read_bool(node, "has-dsi-backlight");
++
++	of_property_read_u32(node, "resolution-x", (u32*) &ddata->vm.vactive);
++	of_property_read_u32(node, "resolution-y", (u32*) &ddata->vm.hactive);
++
++	ddata->vm.pixelclock = ddata->vm.vactive * ddata->vm.hactive * 60;
+
+	return 0;
+ }
+@@ -1234,6 +1239,7 @@ static int dsicm_probe(struct platform_device *pdev)
+	if (r)
+		return r;
+
++	ddata->ulps_timeout = 500;
+	ddata->vm.hactive = 864;
+	ddata->vm.vactive = 480;
+	ddata->vm.pixelclock = 864 * 480 * 60;
+--
+2.11.0
