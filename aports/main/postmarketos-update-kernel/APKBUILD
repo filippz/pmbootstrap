@@ -1,0 +1,15 @@
+pkgname=postmarketos-update-kernel
+pkgver=0.0.1
+pkgrel=0
+pkgdesc="kernel updater script for postmarketOS"
+url="https://github.com/postmarketOS"
+depends="util-linux"
+source="update-kernel.sh"
+arch="noarch"
+license="GPL3"
+
+package() {
+	install -Dm755 "$srcdir/update-kernel.sh" \
+		"$pkgdir/sbin/pmos-update-kernel"
+}
+sha512sums="59fe8b27e8d9d25c11bfa1d01d4d25d10a77f95dc837a76366eb3a2aef2beefd3b0beb7e6a889acd75d0285bc99e1c4b2f0e12cd66ad348293b913c9070e94b5  update-kernel.sh"
