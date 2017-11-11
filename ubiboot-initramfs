@@ -1,0 +1,1 @@
+mount /dev/mmcblk0p5 /mnt/5 && /usr/bin/disable_pm  && kexec -l /mnt/5/vmlinuz-nokia-n9-dtb --initrd=/mnt/5/initramfs-nokia-n9 --append=cma=8M\ debug\ ignore_loglevel\ console=ttyO2\ PMOS_NO_OUTPUT_REDIRECT && kexec -e

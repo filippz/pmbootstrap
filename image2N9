@@ -1,0 +1,77 @@
+#!/bin/bash
+
+if [ `whoami` != root ]
+then
+	echo "You must be root to run the script!"
+	exit
+fi
+
+initramfsOnly=0
+if [ $# -ne 0 ]
+then
+	if [ $# -ne 1 ]
+	then
+		echo "Wrong number of args: should be 0 or 1"
+		exit
+	fi
+	if [ "$1" != "--initramfs" ]
+	then
+	    echo "Arg should --initramfs"
+		exit
+	fi
+	initramfsOnly=1
+fi
+
+pmOSvar="${HOME}/.local/var/pmbootstrap"
+
+img="$pmOSvar/chroot_native/home/pmos/rootfs/nokia-n9.img"
+boot="$pmOSvar/chroot_rootfs_nokia-n9/boot/"
+targetBoot="/dev/sde5"
+targetRootFS="/dev/sde6"
+mnt="/tmp/mntN9"
+
+sudo mkfs.ext3 -L pmOS_boot $targetBoot
+mkdir $mnt
+mount $targetBoot $mnt
+cp $boot/* $mnt
+sync
+umount $targetBoot
+rm -rf $mnt
+
+if [ $initramfsOnly -eq 1 ]
+then
+  echo "Skipping rootfs"
+  exit
+fi
+
+fdisk=$(fdisk -l $img)
+pattern="Sector size.*: (.*) bytes \/"
+if [[ "$fdisk" =~ $pattern ]] ; then
+  sector_size=${BASH_REMATCH[1]}
+else
+  echo "Can't determine logical sector size"
+  exit
+fi
+
+pattern="\.img2[ ]*([0-9]*) "
+if [[ "$fdisk" =~ $pattern ]] ; then
+  partition2_start=${BASH_REMATCH[1]}
+else
+  echo "Can't determine start of img2 partition"
+  exit
+fi
+
+pattern="\.img2[ ]*[0-9]* [0-9]* ([0-9]*) "
+if [[ "$fdisk" =~ $pattern ]] ; then
+  partition2_sectors=${BASH_REMATCH[1]}
+else
+  echo "Can't determine size of img2 partition"
+  exit
+fi
+
+echo "Sector size: $sector_size"
+echo "Partition img2 start: $partition2_start"
+echo "Partition img2 sectors: $partition2_sectors"
+
+dd if=$img bs=4096 skip=$(($sector_size * $partition2_start)) count=$(($sector_size * $partition2_sectors)) iflag=skip_bytes,count_bytes of=$targetRootFS
+sync

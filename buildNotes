@@ -1,0 +1,21 @@
+./pmbootstrap.py zap
+./pmbootstrap.py build linux-nokia-n9
+./pmbootstrap.py build device-nokia-n9
+./pmbootstrap.py install --no-fde
+./pmbootstrap.py export
+umount /dev/sde4 && ./image2N9
+
+ubiboot
+
+...
+G_OS5_INIT_CMDLINE_APPENDS="console=ttyO2,115200"
+...
+# The fifth OS is usually Ubuntu.
+# This section lists the Ubuntu specific switches and kernels
+G_OS5_NUM=1
+G_OS5_AUTOBOOT=0
+G_OS5_PARTITION=4
+G_OS5_NAME="postmarketOS"
+G_OS5_1_LABEL="postmarketOS"
+G_OS5_1_FILE="/boot/postmarketOS/boot/vmlinuz-nokia-n9-dtb"
+...
