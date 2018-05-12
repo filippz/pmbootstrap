@@ -12,7 +12,7 @@ case $pkgver in
 	*.*.*)  _kernver=${pkgver%.*};;
 	*.*) _kernver=$pkgver;;
 esac
-pkgrel=1
+pkgrel=0
 arch="armhf"
 pkgdesc="Nokia N9 kernel"
 url="https://kernel.org"
